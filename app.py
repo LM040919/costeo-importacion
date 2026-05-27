@@ -154,19 +154,42 @@ r = calcular(inp)
 # ----------------------------------------------------------------------------
 st.divider()
 st.subheader("Resultado")
+st.caption(
+    "El **total de embarque** es tu costo real de la mercancía ya en bodega: "
+    "factura del proveedor (en pesos) + los gastos de importación sin IVA."
+)
 
 for adv in r.advertencias:
     st.warning(adv)
 
+if (factura_proveedor_usd or impuestos) and maniobras == 0 and flete_local == 0 and flete_maritimo_usd == 0:
+    st.info(
+        "Aún no agregas costos de logística (fletes / maniobras), así que el total "
+        "solo incluye la factura y los impuestos del pedimento. Elige las tarifas "
+        "arriba para completar el costeo."
+    )
+
 m1, m2, m3 = st.columns(3)
-m1.metric("TOTAL DE EMBARQUE", mxn(r.total_embarque))
-m2.metric("Factura proveedor (MXN)", mxn(r.factura_proveedor_mxn))
-m3.metric("% gasto vs factura", f"{r.pct_gasto_vs_factura:.2%}")
+m1.metric(
+    "TOTAL DE EMBARQUE", mxn(r.total_embarque),
+    help="Factura del proveedor (en pesos) + todos los gastos de importación sin IVA. "
+         "Es el costo real sobre el que defines precio de venta y margen.",
+)
+m2.metric(
+    "Factura proveedor (MXN)", mxn(r.factura_proveedor_mxn),
+    help="La factura del proveedor (USD) convertida a pesos con el tipo de cambio del pedimento.",
+)
+m3.metric(
+    "% gasto vs factura", f"{r.pct_gasto_vs_factura:.2%}",
+    help="Cuánto le suman los gastos de importación a la mercancía, en porcentaje. "
+         "Sube conforme agregas fletes y maniobras.",
+)
 
 col_izq, col_der = st.columns(2)
 
 with col_izq:
     st.markdown("**Cuenta de gastos**")
+    st.caption("Desglose de cada gasto de importación; las últimas filas son los totales (sin IVA, IVA y total).")
     gastos = pd.DataFrame(
         {
             "Concepto": [
