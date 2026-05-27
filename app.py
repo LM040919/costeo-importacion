@@ -14,7 +14,7 @@ from tarifas import OTRO, flete_terrestre_opciones, maniobras_honorarios_opcione
 st.set_page_config(page_title="Costeo de importación", page_icon="📦", layout="wide")
 
 # Campos que se auto-rellenan desde el pedimento (manejados vía session_state).
-CAMPOS_PEDIMENTO = ("no_pedimento", "tipo_cambio", "impuestos", "iva_aduana", "factura_proveedor_usd")
+CAMPOS_PEDIMENTO = ("orden", "proveedor", "no_pedimento", "tipo_cambio", "impuestos", "iva_aduana", "factura_proveedor_usd")
 # El formulario arranca en blanco; se llena al subir el pedimento o capturando a mano.
 _INICIAL = {"orden": "", "proveedor": "", "no_pedimento": "",
             "tipo_cambio": 0.0, "impuestos": 0.0, "iva_aduana": 0.0, "factura_proveedor_usd": 0.0}
@@ -50,8 +50,8 @@ with st.expander("📄 Pedimento (PDF) — auto-rellenado", expanded=True):
                 st.session_state["_ped_file"] = file_id
                 st.session_state["_ped_datos"] = datos
                 for campo in CAMPOS_PEDIMENTO:
-                    if datos.get(campo) is not None:
-                        st.session_state[campo] = datos[campo]
+                    val = datos.get(campo)
+                    st.session_state[campo] = val if val is not None else _INICIAL[campo]
                 st.rerun()
             except Exception as e:  # noqa: BLE001
                 st.error(f"No se pudo leer el pedimento: {e}")
