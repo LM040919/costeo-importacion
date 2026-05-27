@@ -13,30 +13,13 @@ from tarifas import OTRO, flete_terrestre_opciones, maniobras_honorarios_opcione
 
 st.set_page_config(page_title="Costeo de importación", page_icon="📦", layout="wide")
 
-# Valores del ejemplo CM357-25-4 (para verificar contra el Excel).
-EJEMPLO = dict(
-    no_pedimento="26 16 3977 6004925",
-    orden="CM357-25-4",
-    proveedor="SHAAN XI BSBSUCCEED IMPORT AND EXPORT CO.,LTD",
-    tipo_cambio=17.252,
-    impuestos=6699.0,
-    iva_aduana=128455.0,
-    maniobras=15471.0,
-    honorarios=0.0,
-    otros_demoras=0.0,
-    almacenajes=0.0,
-    flete_local=25000.0,
-    falsos=0.0,
-    ajuste_iva_flete_local=925.44,
-    flete_maritimo_usd=2808.75,
-    factura_proveedor_usd=43713.0,
-    cargos_transferencia_usd=0.0,
-)
-
 # Campos que se auto-rellenan desde el pedimento (manejados vía session_state).
 CAMPOS_PEDIMENTO = ("no_pedimento", "tipo_cambio", "impuestos", "iva_aduana", "factura_proveedor_usd")
-for _campo in ("orden", "proveedor", *CAMPOS_PEDIMENTO):
-    st.session_state.setdefault(_campo, EJEMPLO[_campo])
+# El formulario arranca en blanco; se llena al subir el pedimento o capturando a mano.
+_INICIAL = {"orden": "", "proveedor": "", "no_pedimento": "",
+            "tipo_cambio": 0.0, "impuestos": 0.0, "iva_aduana": 0.0, "factura_proveedor_usd": 0.0}
+for _campo, _val in _INICIAL.items():
+    st.session_state.setdefault(_campo, _val)
 
 
 def mxn(x: float) -> str:
@@ -45,9 +28,8 @@ def mxn(x: float) -> str:
 
 st.title("📦 Costeo de importación")
 st.caption(
-    "Sube el pedimento para auto-rellenar los datos fiscales, o usa el ejemplo "
-    "precargado (CM357-25-4) para verificar contra tu Excel. El costo total se "
-    "recalcula al instante."
+    "Sube el pedimento para auto-rellenar los datos fiscales, luego elige o captura "
+    "los costos de logística. El costo total se recalcula al instante."
 )
 
 # ----------------------------------------------------------------------------
@@ -110,38 +92,42 @@ with c2:
     st.markdown("**Gastos de agente aduanal / logística (MXN)**")
     mh_labels, mh_mapa = maniobras_honorarios_opciones()
     mh_sel = st.selectbox(
-        "Maniobras y honorarios", mh_labels, index=len(mh_labels) - 1,
+        "Maniobras y honorarios", mh_labels, index=None, placeholder="Selecciona…",
         help="Tarifa fija del agente aduanal (maniobras + honorarios juntos).",
     )
     if mh_sel == OTRO:
-        maniobras = st.number_input("Monto maniobras y honorarios (MXN, sin IVA)", value=EJEMPLO["maniobras"], step=100.0)
-    else:
+        maniobras = st.number_input("Monto maniobras y honorarios (MXN, sin IVA)", value=0.0, step=100.0)
+    elif mh_sel:
         maniobras = mh_mapa[mh_sel]
-        st.caption(f"Tarifa seleccionada: ${maniobras:,.2f} (sin IVA)")
+        st.caption(f"Tarifa: ${maniobras:,.2f} (sin IVA)")
+    else:
+        maniobras = 0.0
     honorarios = 0.0  # van incluidos en la tarifa de maniobras y honorarios
-    otros_demoras = st.number_input("Otros (demoras)", value=EJEMPLO["otros_demoras"], step=100.0)
-    almacenajes = st.number_input("Almacenajes (si aplica)", value=EJEMPLO["almacenajes"], step=100.0)
-    falsos = st.number_input("Falsos", value=EJEMPLO["falsos"], step=100.0)
+    otros_demoras = st.number_input("Otros (demoras)", value=0.0, step=100.0)
+    almacenajes = st.number_input("Almacenajes (si aplica)", value=0.0, step=100.0)
+    falsos = st.number_input("Falsos", value=0.0, step=100.0)
     ft_labels, ft_mapa = flete_terrestre_opciones()
     ft_sel = st.selectbox(
-        "Flete local / terrestre", ft_labels, index=len(ft_labels) - 1,
+        "Flete local / terrestre", ft_labels, index=None, placeholder="Selecciona…",
         help="Elige proveedor y tipo; el monto se llena solo. Usa 'Otro' para un caso fuera del catálogo.",
     )
     if ft_sel == OTRO:
-        flete_local = st.number_input("Monto flete local (MXN, sin IVA)", value=EJEMPLO["flete_local"], step=100.0)
-    else:
+        flete_local = st.number_input("Monto flete local (MXN, sin IVA)", value=0.0, step=100.0)
+    elif ft_sel:
         flete_local = ft_mapa[ft_sel]
-        st.caption(f"Tarifa seleccionada: ${flete_local:,.2f} (sin IVA)")
+        st.caption(f"Tarifa: ${flete_local:,.2f} (sin IVA)")
+    else:
+        flete_local = 0.0
     ajuste_iva_flete_local = st.number_input(
-        "Ajuste IVA flete local", value=EJEMPLO["ajuste_iva_flete_local"], step=10.0,
+        "Ajuste IVA flete local", value=0.0, step=10.0,
         help="Monto fijo que la plantilla resta al IVA del flete local (celda D26 del Excel).",
     )
 
 with c3:
     st.markdown("**Mercancía y flete marítimo (USD)**")
     factura_proveedor_usd = st.number_input("Factura del proveedor", step=100.0, key="factura_proveedor_usd")
-    flete_maritimo_usd = st.number_input("Flete marítimo", value=EJEMPLO["flete_maritimo_usd"], step=10.0)
-    cargos_transferencia_usd = st.number_input("Cargos por transferencia", value=EJEMPLO["cargos_transferencia_usd"], step=10.0)
+    flete_maritimo_usd = st.number_input("Flete marítimo", value=0.0, step=10.0)
+    cargos_transferencia_usd = st.number_input("Cargos por transferencia", value=0.0, step=10.0)
 
 inp = CosteoInputs(
     tipo_cambio=tipo_cambio,
