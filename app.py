@@ -118,10 +118,6 @@ with c2:
         st.caption(f"Tarifa: ${flete_local:,.2f} (sin IVA)")
     else:
         flete_local = 0.0
-    ajuste_iva_flete_local = st.number_input(
-        "Ajuste IVA flete local", value=0.0, step=10.0,
-        help="Monto fijo que la plantilla resta al IVA del flete local (celda D26 del Excel).",
-    )
 
 with c3:
     st.markdown("**Mercancía y flete marítimo (USD)**")
@@ -142,7 +138,6 @@ inp = CosteoInputs(
     flete_maritimo_usd=flete_maritimo_usd,
     factura_proveedor_usd=factura_proveedor_usd,
     cargos_transferencia_usd=cargos_transferencia_usd,
-    ajuste_iva_flete_local=ajuste_iva_flete_local,
     no_pedimento=no_pedimento,
     orden=orden,
     proveedor=proveedor,

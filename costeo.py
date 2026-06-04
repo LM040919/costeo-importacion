@@ -18,10 +18,10 @@ Mapeo de celdas del Excel original (hoja "COSTEO REAL "):
     E36 FAC. PROVEEDOR (USD)             -> factura_proveedor_usd
     E37 CARGOS POR SERV. DE TRANSFERENCIA (USD) -> cargos_transferencia_usd
 
-IVA: las maniobras, honorarios, otros y almacenajes generan 16% de IVA.
-El flete local también, pero en el Excel se le resta un ajuste fijo (celda
-D26 = E25*0.16 - 925.44); lo dejamos como parámetro 'ajuste_iva_flete_local'.
-El flete marítimo no lleva IVA en la plantilla.
+IVA: las maniobras, honorarios, otros, almacenajes y flete local generan 16%
+de IVA. El flete marítimo no lleva IVA en la plantilla.
+(El Excel original restaba un ajuste fijo de 925.44 al IVA del flete local;
+resultó ser un error de captura y se eliminó del cálculo.)
 
 Regla financiera clave: el IVA es recuperable, por eso NO se carga al costo.
 Solo los gastos netos (sin IVA) se prorratean sobre la mercancía.
@@ -55,9 +55,6 @@ class CosteoInputs:
     # --- Mercancía / cargos (en USD) ---
     factura_proveedor_usd: float = 0.0
     cargos_transferencia_usd: float = 0.0
-
-    # Ajuste fijo que la plantilla resta al IVA del flete local (celda D26)
-    ajuste_iva_flete_local: float = 0.0
 
     # --- Datos descriptivos (no entran al cálculo) ---
     no_pedimento: str = ""
@@ -107,7 +104,7 @@ def calcular(inp: CosteoInputs) -> CosteoResultado:
     iva_honorarios = inp.honorarios * TASA_IVA               # D18
     iva_otros = inp.otros_demoras * TASA_IVA                 # D20
     iva_almacenajes = inp.almacenajes * TASA_IVA             # D22
-    iva_flete_local = inp.flete_local * TASA_IVA - inp.ajuste_iva_flete_local  # D26
+    iva_flete_local = inp.flete_local * TASA_IVA  # D26
 
     # Cuenta de gastos (columna "VALOR SIN IVA" -> E29)
     total_gastos_sin_iva = (
@@ -181,17 +178,19 @@ if __name__ == "__main__":
         flete_maritimo_usd=2808.75,
         factura_proveedor_usd=43713.0,
         cargos_transferencia_usd=0.0,
-        ajuste_iva_flete_local=925.44,
         no_pedimento="26 16 3977 6004925",
         orden="CM357-25-4",
         proveedor="SHAAN XI BSBSUCCEED IMPORT AND EXPORT CO.,LTD",
     )
     r = calcular(caso)
 
+    # Nota: total_gastos_iva y total_cuenta_gastos difieren del Excel original
+    # por 925.44 — ese ajuste resultó ser un error de la plantilla y se eliminó.
+    # El TOTAL DE EMBARQUE y el % de gasto NO cambian (el IVA es recuperable).
     esperado = {
         "total_gastos_sin_iva": 95626.555,
-        "total_gastos_iva": 134004.92,
-        "total_cuenta_gastos": 229631.475,
+        "total_gastos_iva": 134930.36,
+        "total_cuenta_gastos": 230556.915,
         "factura_proveedor_mxn": 754136.676,
         "prorrateo_gastos": 95626.555,
         "total_embarque": 849763.231,

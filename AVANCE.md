@@ -57,11 +57,16 @@ confiable y no requiere OCR.
 
 ## Pendientes / dudas para Compras (Isabel)
 
-- **Ajuste de 925.44** que la plantilla resta al IVA del flete local: ¿qué es y es
-  fijo? (No afecta el total, solo el IVA.)
 - **Cargos por transferencia:** en el Excel parecen sumarse dos veces; confirmar.
 - **Catálogos de tarifas:** ¿están completos? ¿hay más proveedores de flete
   terrestre o más agentes aduanales además de WISE/WOODWARD?
+
+### Resuelto
+
+- **Ajuste de 925.44** al IVA del flete local: confirmado con Luis que era un
+  **error** de la plantilla original; ya removido del cálculo (2026-06-04). El
+  TOTAL DE EMBARQUE no cambia (el IVA es recuperable), solo el IVA recuperable
+  total sube de 134,004.92 a 134,930.36 en el caso CM357.
 
 ## Próximos pasos posibles
 
