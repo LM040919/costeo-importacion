@@ -103,7 +103,7 @@ with c2:
     else:
         maniobras = 0.0
     honorarios = 0.0  # van incluidos en la tarifa de maniobras y honorarios
-    otros_demoras = st.number_input("Otros (demoras)", value=0.0, step=100.0)
+    otros_demoras = st.number_input("Demoras (si aplica)", value=0.0, step=100.0)
     almacenajes = st.number_input("Almacenajes (si aplica)", value=0.0, step=100.0)
     falsos = st.number_input("Falsos", value=0.0, step=100.0)
     ft_labels, ft_mapa = flete_terrestre_opciones()
@@ -190,7 +190,7 @@ with col_izq:
             "Concepto": [
                 "Impuestos (sin IVA)",
                 "Maniobras y honorarios",
-                "Otros (demoras)",
+                "Demoras (si aplica)",
                 "Almacenajes",
                 "Flete marítimo",
                 "Flete local",

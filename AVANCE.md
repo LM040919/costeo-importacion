@@ -60,19 +60,30 @@ confiable y no requiere OCR.
 
 ## Pendientes / dudas para Compras (Isabel)
 
-- **Cargos por transferencia:** en el Excel parecen sumarse dos veces; confirmar.
+- **Cargos por transferencia:** Isabel no los usa en su proceso, pero le va a
+  pedir a sus compañeras que revisen si el doble conteo de la plantilla del
+  Excel original es correcto o un error.
+- **Flete local de $26,500** que aparece en CM009-26: no calza con las tarifas
+  conocidas (Henco / RTC / GISAP). ¿De qué transportista y tipo es esta tarifa?
 - **Catálogos de tarifas:** ¿están completos? ¿hay más proveedores de flete
   terrestre o más agentes aduanales además de WISE/WOODWARD?
 
 ### Resuelto
 
-- **Ajuste de 925.44** al IVA del flete local: confirmado con Luis que era un
-  **error** de la plantilla original; ya removido del cálculo (2026-06-04). El
-  TOTAL DE EMBARQUE no cambia (el IVA es recuperable), solo el IVA recuperable
-  total sube de 134,004.92 a 134,930.36 en el caso CM357.
+- **Ajuste de 925.44** al IVA del flete local: Luis confirmó que era un
+  **error** de la plantilla original; ya removido del cálculo (2026-06-04).
+  Confirmado adicionalmente al ver el costeo de CM009-26: D26 = E25 × 16%
+  sin la resta.
+- **Forma de pago 15 (OTROS) en el pedimento:** Marisa la incluye al costo
+  (sumada con FP=0). El extractor ya lo hace así. Verificado con CM009-26.
+
+## Pendientes técnicos
+
+- **Extracción de la factura del flete marítimo:** Luis quiere subir el PDF de
+  la factura del forwarder y que se autorelleno el campo de flete marítimo.
+  Bloqueado hasta tener una factura de muestra.
 
 ## Próximos pasos posibles
 
 - Descargar el resultado en Excel con el formato actual de la plantilla.
 - Agregar más tarifas al catálogo conforme las confirme Compras.
-- Desplegar a la nube (demo) para que lo use el equipo.
