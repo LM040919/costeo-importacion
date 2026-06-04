@@ -64,8 +64,8 @@ with st.expander("📄 Pedimento (PDF) — auto-rellenado", expanded=True):
             st.dataframe(
                 pd.DataFrame(
                     {
-                        "Campo": ["Tipo de cambio", "Impuestos (DTA+PRV)",
-                                  "IVA aduana (IVA+IVA/PRV)", "Factura proveedor (USD)"],
+                        "Campo": ["Tipo de cambio", "Impuestos sin IVA",
+                                  "IVA de aduana", "Factura proveedor (USD)"],
                         "Valor extraído": [datos.get("tipo_cambio"), datos.get("impuestos"),
                                            datos.get("iva_aduana"), datos.get("factura_proveedor_usd")],
                     }

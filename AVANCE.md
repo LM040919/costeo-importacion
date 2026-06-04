@@ -36,8 +36,11 @@ costos de logística → ves el costo total del embarque.
 Las fórmulas "raras" del Excel correspondían a campos del **cuadro de liquidación**
 del pedimento:
 
-- **Impuestos** = DTA + PRV
-- **IVA de aduana** = IVA + IVA/PRV
+- **Impuestos** (al costo) = DTA + PRV + IGI + IEPS
+- **IVA de aduana** (recuperable) = IVA + IVA/PRV + IEPS/IVA
+
+Cuando un concepto aparece con varias formas de pago (FP 0 y FP 15), se suman
+todos los renglones.
 - **Factura del proveedor (USD)** = VAL. DOLARES de la línea del proveedor
 
 Regla financiera respetada: el **IVA es recuperable y no se carga al costo**; solo

@@ -33,9 +33,19 @@ def _proveedor(doc):
     """
     for page in doc.pages:
         words = page.extract_words()
-        hdr = next((w for w in words if w["text"].startswith("NOMBRE,DENOMINACION")), None)
-        if not hdr:
+        # Solo la página que contiene el bloque del proveedor.
+        if not any(w["text"] == "PROVEEDOR" for w in words):
             continue
+        # El header puede venir como "NOMBRE,DENOMINACION" (sin espacio) o como
+        # "NOMBRE," seguido de "DENOMINACION" (con espacio). Tomamos el word con
+        # ese prefijo que esté más arriba en la página.
+        candidatos = sorted(
+            (w for w in words if w["text"].startswith("NOMBRE")),
+            key=lambda w: w["top"],
+        )
+        if not candidatos:
+            continue
+        hdr = candidatos[0]
         nx0 = hdr["x0"]
         # La fila "NUM. FACTURA" marca el fin del bloque del nombre/domicilio.
         fac = next((w for w in words if w["text"] == "FACTURA" and w["top"] > hdr["top"]), None)
@@ -78,17 +88,24 @@ def extraer(archivo):
         liq = re.split(r"DEP[ÓO]SITO REFERENCIADO|\*\*\*\s*PAGO", liq)[0]
 
     def importe(concepto):
-        m = re.search(concepto + r"\s+\d+\s+([\d,]+)", liq)
-        return _num(m.group(1)) if m else 0.0
+        # Algunos pedimentos tienen varios renglones por concepto (FP 0 y FP 15);
+        # sumamos TODOS los importes encontrados.
+        return sum(_num(m) for m in re.findall(concepto + r"\s+\d+\s+([\d,]+)", liq))
 
     dta = importe(r"(?<![A-Z/])DTA")
     prv = importe(r"(?<![A-Z/])PRV")
     iva = importe(r"(?<![A-Z/])IVA(?![/A-Z])")
     iva_prv = importe(r"IVA/PRV")
+    igi = importe(r"(?<![A-Z/])IGI(?![/A-Z])")
+    ieps = importe(r"(?<![A-Z/])IEPS(?![/A-Z])")
+    ieps_iva = importe(r"IEPS/IVA")
 
     d["dta"], d["prv"], d["iva"], d["iva_prv"] = dta, prv, iva, iva_prv
-    d["impuestos"] = dta + prv
-    d["iva_aduana"] = iva + iva_prv
+    d["igi"], d["ieps"], d["ieps_iva"] = igi, ieps, ieps_iva
+    # Impuestos NO recuperables (entran al costo): DTA + PRV + IGI + IEPS
+    d["impuestos"] = dta + prv + igi + ieps
+    # IVA recuperable (NO entra al costo): IVA + IVA/PRV + IEPS/IVA
+    d["iva_aduana"] = iva + iva_prv + ieps_iva
 
     # Factura(s) del proveedor: tomar VAL. DOLARES (último número de la línea).
     facturas = re.findall(
