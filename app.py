@@ -7,17 +7,23 @@ Ejecutar con:
 import pandas as pd
 import streamlit as st
 
+import flete
 import pedimento
 from costeo import CosteoInputs, calcular
 from tarifas import OTRO, flete_terrestre_opciones, maniobras_honorarios_opciones
 
 st.set_page_config(page_title="Costeo de importación", page_icon="📦", layout="wide")
 
-# Campos que se auto-rellenan desde el pedimento (manejados vía session_state).
-CAMPOS_PEDIMENTO = ("orden", "proveedor", "no_pedimento", "tipo_cambio", "impuestos", "iva_aduana", "factura_proveedor_usd")
-# El formulario arranca en blanco; se llena al subir el pedimento o capturando a mano.
+# Campos que se auto-rellenan desde documentos (manejados vía session_state).
+# REQ: siempre presentes en el pedimento; se sobreescriben al subir uno nuevo.
+# OPC: a veces no aparecen (ej. la orden); solo se llenan si el documento las trae.
+CAMPOS_PEDIMENTO_REQ = ("proveedor", "no_pedimento", "tipo_cambio", "impuestos", "iva_aduana", "factura_proveedor_usd")
+CAMPOS_PEDIMENTO_OPC = ("orden",)
+CAMPOS_PEDIMENTO = CAMPOS_PEDIMENTO_REQ + CAMPOS_PEDIMENTO_OPC
+# El formulario arranca en blanco; se llena al subir documentos o capturando a mano.
 _INICIAL = {"orden": "", "proveedor": "", "no_pedimento": "",
-            "tipo_cambio": 0.0, "impuestos": 0.0, "iva_aduana": 0.0, "factura_proveedor_usd": 0.0}
+            "tipo_cambio": 0.0, "impuestos": 0.0, "iva_aduana": 0.0,
+            "factura_proveedor_usd": 0.0, "flete_maritimo_usd": 0.0}
 for _campo, _val in _INICIAL.items():
     st.session_state.setdefault(_campo, _val)
 
@@ -49,9 +55,16 @@ with st.expander("📄 Pedimento (PDF) — auto-rellenado", expanded=True):
                 datos = pedimento.extraer(pdf)
                 st.session_state["_ped_file"] = file_id
                 st.session_state["_ped_datos"] = datos
-                for campo in CAMPOS_PEDIMENTO:
+                # Los campos siempre presentes se reinician al cargar otro pedimento.
+                for campo in CAMPOS_PEDIMENTO_REQ:
                     val = datos.get(campo)
                     st.session_state[campo] = val if val is not None else _INICIAL[campo]
+                # Los opcionales (orden) solo se llenan si el pedimento las trae, para
+                # no borrar lo que ya capturó otra fuente (p. ej. la factura del flete).
+                for campo in CAMPOS_PEDIMENTO_OPC:
+                    val = datos.get(campo)
+                    if val is not None:
+                        st.session_state[campo] = val
                 st.rerun()
             except Exception as e:  # noqa: BLE001
                 st.error(f"No se pudo leer el pedimento: {e}")
@@ -72,6 +85,48 @@ with st.expander("📄 Pedimento (PDF) — auto-rellenado", expanded=True):
                 ),
                 hide_index=True, width="stretch",
             )
+
+# ----------------------------------------------------------------------------
+# 1b) Factura del flete marítimo (PDF/CFDI) — auto-rellenado
+# ----------------------------------------------------------------------------
+with st.expander("🚢 Factura del flete marítimo (PDF) — auto-rellenado", expanded=False):
+    st.write(
+        "Sube la factura (CFDI) del forwarder y se rellena solo el campo "
+        "**Flete marítimo (USD)**. Si la factura trae la orden interna "
+        "(P.O. Reference), también se autocompleta."
+    )
+    pdf_flete = st.file_uploader("Arrastra la factura aquí", type="pdf", key="up_flete")
+    if pdf_flete is not None:
+        file_id = (pdf_flete.name, pdf_flete.size)
+        if st.session_state.get("_flete_file") != file_id:
+            try:
+                datos_f = flete.extraer(pdf_flete)
+                st.session_state["_flete_file"] = file_id
+                st.session_state["_flete_datos"] = datos_f
+                sub = datos_f.get("flete_subtotal")
+                if sub is not None and datos_f.get("moneda") == "USD":
+                    st.session_state["flete_maritimo_usd"] = sub
+                if datos_f.get("orden"):
+                    st.session_state["orden"] = datos_f["orden"]
+                st.rerun()
+            except Exception as e:  # noqa: BLE001
+                st.error(f"No se pudo leer la factura: {e}")
+        datos_f = st.session_state.get("_flete_datos", {})
+        if datos_f:
+            sub = datos_f.get("flete_subtotal")
+            moneda = datos_f.get("moneda")
+            if sub is not None:
+                st.success(
+                    f"Factura leída ({datos_f.get('_paginas')} páginas). "
+                    f"Flete marítimo: ${sub:,.2f} {moneda or ''}."
+                )
+            else:
+                st.warning("No pude detectar el subtotal en la factura.")
+            if moneda and moneda != "USD":
+                st.warning(
+                    f"La factura está en {moneda}; el campo 'Flete marítimo' es USD. "
+                    "No auto-rellené para evitar errores; captura manualmente."
+                )
 
 # ----------------------------------------------------------------------------
 # 2) Captura de parámetros
@@ -122,7 +177,7 @@ with c2:
 with c3:
     st.markdown("**Mercancía y flete marítimo (USD)**")
     factura_proveedor_usd = st.number_input("Factura del proveedor", step=100.0, key="factura_proveedor_usd")
-    flete_maritimo_usd = st.number_input("Flete marítimo", value=0.0, step=10.0)
+    flete_maritimo_usd = st.number_input("Flete marítimo", step=10.0, key="flete_maritimo_usd")
     cargos_transferencia_usd = st.number_input("Cargos por transferencia", value=0.0, step=10.0)
 
 inp = CosteoInputs(

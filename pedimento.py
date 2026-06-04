@@ -74,8 +74,8 @@ def extraer(archivo):
     m = re.search(r"NUM\.?\s*PEDIMENTO:?\s*(\d{2}\s+\d{2}\s+\d{4}\s+\d{7})", texto)
     d["no_pedimento"] = re.sub(r"\s+", " ", m.group(1)).strip() if m else None
 
-    # Orden interna (folio tipo CM###-##-#): NO siempre aparece en el pedimento.
-    m = re.search(r"CM\d{2,4}-\d{2}-\d{1,2}", texto)
+    # Orden interna (folio CM###-## o CM###-##-#): NO siempre aparece en el pedimento.
+    m = re.search(r"CM\d{2,4}-\d{2}(?:-\d{1,2})?", texto)
     d["orden"] = m.group(0) if m else None
 
     m = re.search(r"TIPO\s*CAMBIO:?\s*(\d+\.\d+)", texto)
