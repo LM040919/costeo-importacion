@@ -1,10 +1,14 @@
 """Generación del archivo Excel del costeo (botón de descarga).
 
-Replica el layout de la plantilla "COSTEO ESTIMADO" de Marisa (mismas filas y
-columnas), pero con **fórmulas** en lugar de valores hardcodeados — así el
-archivo descargado sigue siendo editable y se recalcula solo si tocan algún
-campo. Al final agrega un bloque con el detalle de las extracciones del
-pedimento (DTA / PRV / IGI / IVA / IVA-PRV) y las tarifas elegidas del catálogo.
+Layout simple y legible (NO replica la plantilla original 1:1):
+  1. Encabezado con los datos del embarque (orden, pedimento, TC, USD inputs).
+  2. RESUMEN con los 4 números clave (total embarque, factura MXN, gastos, %).
+  3. GASTOS DE IMPORTACIÓN: tabla con Sin IVA / IVA / Total por concepto.
+  4. COSTO DEL EMBARQUE: cómo se arma el total a partir de factura + prorrateo.
+  5. DETALLE DE EXTRACCIÓN: contribuciones del pedimento y tarifas elegidas.
+
+Todas las cuentas son fórmulas (no valores hardcodeados): el archivo sigue
+siendo editable y se recalcula al cambiar cualquier monto o el TC.
 """
 
 from datetime import date
@@ -12,13 +16,39 @@ from io import BytesIO
 
 import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
 
 
-TITULO = Font(bold=True, size=14)
-NEGRITA = Font(bold=True)
-ITALICA = Font(italic=True, size=10, color="595959")
-FONDO_HEADER = PatternFill("solid", start_color="DDEBF7")
+# Estilos
+TITULO_FONT = Font(bold=True, size=16, color="FFFFFF")
+TITULO_FILL = PatternFill("solid", start_color="2F5496")
+SECCION_FONT = Font(bold=True, size=11, color="FFFFFF")
+SECCION_FILL = PatternFill("solid", start_color="4472C4")
+HEADER_FONT = Font(bold=True, size=10)
+HEADER_FILL = PatternFill("solid", start_color="DDEBF7")
+ETIQUETA_FONT = Font(bold=True, size=10)
+TOTAL_FONT = Font(bold=True, size=12)
+RESALTAR_FONT = Font(bold=True, size=14, color="1F4E78")
+RESALTAR_FILL = PatternFill("solid", start_color="E2EFDA")
+NOTA_FONT = Font(italic=True, size=9, color="595959")
+
+CENTER = Alignment(horizontal="center", vertical="center")
+CENTER_WRAP = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
 FORMATO_MXN = "$#,##0.00"
+FORMATO_PCT = "0.00%"
+FORMATO_TC = "0.0000"
+
+
+def _seccion(ws, fila, texto, columnas=4):
+    """Pinta un header de sección (merged, color)."""
+    last_col = get_column_letter(columnas)
+    ws.merge_cells(f"A{fila}:{last_col}{fila}")
+    cell = ws[f"A{fila}"]
+    cell.value = texto
+    cell.font = SECCION_FONT
+    cell.fill = SECCION_FILL
+    cell.alignment = CENTER
 
 
 def generar_xlsx(inp, r, detalle_pedimento=None, mh_label=None, ft_label=None):
@@ -26,196 +56,181 @@ def generar_xlsx(inp, r, detalle_pedimento=None, mh_label=None, ft_label=None):
 
     Args:
         inp: CosteoInputs con los valores capturados.
-        r: CosteoResultado (los totales se recalculan con fórmulas en el Excel).
+        r: CosteoResultado (los totales se recalculan con fórmulas).
         detalle_pedimento: dict opcional con dta/prv/igi/iva/iva_prv/ieps...
         mh_label: etiqueta del selector de maniobras (ej. "WISE ($20,640.00)").
         ft_label: etiqueta del selector de flete terrestre.
-
-    Returns:
-        bytes: contenido del archivo .xlsx listo para descargar.
     """
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "COSTEO"
 
-    # --- Encabezado ---
-    ws["A1"] = "ELABORÓ:"
-    ws["A1"].font = NEGRITA
-    ws["B1"] = "Costeo App (Marvel)"
-    ws["D1"] = "FECHA:"
-    ws["D1"].font = NEGRITA
-    ws["E1"] = date.today()
-    ws["E1"].number_format = "yyyy-mm-dd"
+    # --- Título ---
+    ws.merge_cells("A1:D1")
+    ws["A1"] = "COSTEO DE IMPORTACIÓN"
+    ws["A1"].font = TITULO_FONT
+    ws["A1"].fill = TITULO_FILL
+    ws["A1"].alignment = CENTER
+    ws.row_dimensions[1].height = 28
 
-    ws["B2"] = "NO. PEDIMENTO"
-    ws["B2"].font = NEGRITA
-    ws["C2"] = inp.no_pedimento or ""
-    ws["D2"] = "T.C."
-    ws["D2"].font = NEGRITA
-    ws["E2"] = float(inp.tipo_cambio or 0)
-    ws["E2"].number_format = "0.0000"
+    # --- Datos del embarque (fila 3-10). Los formularios referencian a estas celdas. ---
+    datos = [
+        ("Orden", inp.orden or "", None),
+        ("No. pedimento", inp.no_pedimento or "", None),
+        ("Proveedor", inp.proveedor or "", None),
+        ("Tipo de cambio", float(inp.tipo_cambio or 0), FORMATO_TC),
+        ("Factura proveedor (USD)", float(inp.factura_proveedor_usd or 0), FORMATO_MXN),
+        ("Flete marítimo (USD)", float(inp.flete_maritimo_usd or 0), FORMATO_MXN),
+        ("Cargos por transferencia (USD)", float(inp.cargos_transferencia_usd or 0), FORMATO_MXN),
+        ("Fecha", date.today(), "yyyy-mm-dd"),
+    ]
+    for i, (etiqueta, valor, fmt) in enumerate(datos, start=3):
+        ws[f"A{i}"] = etiqueta
+        ws[f"A{i}"].font = ETIQUETA_FONT
+        ws[f"B{i}"] = valor
+        if fmt:
+            ws[f"B{i}"].number_format = fmt
+    # Referencias clave (para uso interno en fórmulas):
+    #   B6 = tipo de cambio
+    #   B7 = factura proveedor (USD)
+    #   B8 = flete marítimo (USD)
+    #   B9 = cargos por transferencia (USD)
 
-    ws.merge_cells("B3:D3")
-    ws["B3"] = "COSTEO ESTIMADO"
-    ws["B3"].font = TITULO
-    ws["B3"].alignment = Alignment(horizontal="center")
+    # --- RESUMEN ---
+    _seccion(ws, 12, "RESUMEN")
+    resumen = [
+        ("Total de embarque (MXN)", "=B34", FORMATO_MXN, True),
+        ("Factura del proveedor (MXN)", "=B7*B6", FORMATO_MXN, False),
+        ("Gastos de importación (MXN, sin IVA)", "=B27", FORMATO_MXN, False),
+        ("% gasto vs factura", "=IFERROR(B15/B14,0)", FORMATO_PCT, False),
+    ]
+    for i, (etiqueta, formula, fmt, resaltar) in enumerate(resumen, start=13):
+        ws[f"A{i}"] = etiqueta
+        ws[f"A{i}"].font = ETIQUETA_FONT
+        ws[f"B{i}"] = formula
+        ws[f"B{i}"].number_format = fmt
+        if resaltar:
+            ws[f"B{i}"].font = RESALTAR_FONT
+            ws[f"B{i}"].fill = RESALTAR_FILL
+            ws[f"A{i}"].fill = RESALTAR_FILL
+            ws.row_dimensions[i].height = 24
 
-    ws["A6"] = "ORDEN"
-    ws["A6"].font = NEGRITA
-    ws["B6"] = inp.orden or ""
+    # --- GASTOS DE IMPORTACIÓN ---
+    _seccion(ws, 18, "GASTOS DE IMPORTACIÓN")
+    for col_idx, label in enumerate(["Concepto", "Sin IVA (MXN)", "IVA (MXN)", "Total (MXN)"], start=1):
+        cell = ws.cell(row=19, column=col_idx, value=label)
+        cell.font = HEADER_FONT
+        cell.fill = HEADER_FILL
+        cell.alignment = CENTER
 
-    ws.merge_cells("B9:E9")
-    ws["B9"] = inp.proveedor or ""
-    ws["B9"].font = NEGRITA
-    ws["B9"].alignment = Alignment(horizontal="center")
+    # (label, sin_iva, iva)  -- iva=None significa "calcular como sin_iva * 16%"
+    gastos = [
+        ("Impuestos del pedimento", float(inp.impuestos or 0), float(inp.iva_aduana or 0)),
+        ("Maniobras y honorarios", float(inp.maniobras or 0), None),
+        ("Demoras", float(inp.otros_demoras or 0), None),
+        ("Almacenaje", float(inp.almacenajes or 0), None),
+        ("Flete marítimo", "=B8*B6", 0),
+        ("Flete local", float(inp.flete_local or 0), None),
+        ("Pos. en falso", float(inp.falsos or 0), 0),
+    ]
+    for i, (label, sin_iva, iva) in enumerate(gastos, start=20):
+        ws[f"A{i}"] = label
+        ws[f"B{i}"] = sin_iva
+        ws[f"C{i}"] = f"=B{i}*0.16" if iva is None else iva
+        ws[f"D{i}"] = f"=B{i}+C{i}"
+        for col in "BCD":
+            ws[f"{col}{i}"].number_format = FORMATO_MXN
 
-    # --- Cuenta de gastos ---
-    ws["D12"] = "IVA"
-    ws["E12"] = "VALOR SIN IVA"
-    ws["D12"].font = NEGRITA
-    ws["E12"].font = NEGRITA
-    ws["D12"].fill = FONDO_HEADER
-    ws["E12"].fill = FONDO_HEADER
+    # Total de gastos
+    ws["A27"] = "TOTAL GASTOS"
+    ws["A27"].font = TOTAL_FONT
+    ws["A27"].fill = HEADER_FILL
+    ws["B27"] = "=SUM(B20:B26)"
+    ws["C27"] = "=SUM(C20:C26)"
+    ws["D27"] = "=B27+C27"
+    for col in "BCD":
+        ws[f"{col}27"].font = TOTAL_FONT
+        ws[f"{col}27"].fill = HEADER_FILL
+        ws[f"{col}27"].number_format = FORMATO_MXN
 
-    ws["B13"] = "IMPUESTOS"
-    ws["E13"] = float(inp.impuestos or 0)
-    ws["B14"] = "IVA"
-    ws["D14"] = float(inp.iva_aduana or 0)
+    # --- COSTO DEL EMBARQUE ---
+    _seccion(ws, 29, "COSTO DEL EMBARQUE")
+    ws["A30"] = "Concepto"
+    ws["B30"] = "Monto (MXN)"
+    ws["A30"].font = HEADER_FONT
+    ws["B30"].font = HEADER_FONT
+    ws["A30"].fill = HEADER_FILL
+    ws["B30"].fill = HEADER_FILL
+    ws["B30"].alignment = CENTER
 
-    ws["B15"] = "MANIOBRAS Y HONORARIOS"
-    ws["E15"] = float(inp.maniobras or 0)
-    ws["B16"] = "IVA"
-    ws["D16"] = "=E15*0.16"
+    embarque = [
+        ("Factura del proveedor", "=B7*B6"),
+        ("Cargos por transferencia", "=B9*B6"),
+        ("Prorrateo de gastos (sin IVA)", "=B27"),
+    ]
+    for i, (label, formula) in enumerate(embarque, start=31):
+        ws[f"A{i}"] = label
+        ws[f"B{i}"] = formula
+        ws[f"B{i}"].number_format = FORMATO_MXN
 
-    ws["B17"] = "HONORARIOS"
-    ws["E17"] = float(inp.honorarios or 0)
-    ws["B18"] = "IVA"
-    ws["D18"] = "=E17*0.16"
+    ws["A34"] = "TOTAL DE EMBARQUE"
+    ws["A34"].font = RESALTAR_FONT
+    ws["A34"].fill = RESALTAR_FILL
+    ws["B34"] = "=SUM(B31:B33)"
+    ws["B34"].font = RESALTAR_FONT
+    ws["B34"].fill = RESALTAR_FILL
+    ws["B34"].number_format = FORMATO_MXN
+    ws.row_dimensions[34].height = 24
 
-    ws["B19"] = "DEMORAS (si aplica)"
-    ws["E19"] = float(inp.otros_demoras or 0)
-    ws["F19"] = "=E15"
-    ws["G19"] = "Este es el valor que va en la partida de gastos de importacion en LC"
-    ws["G19"].font = ITALICA
-    ws["B20"] = "IVA"
-    ws["D20"] = "=E19*0.16"
+    # --- Nota ---
+    ws.merge_cells("A36:D36")
+    ws["A36"] = ("Nota: el IVA es recuperable y NO se carga al costo. "
+                 "Solo los gastos netos (sin IVA) se prorratean sobre la mercancía.")
+    ws["A36"].font = NOTA_FONT
+    ws["A36"].alignment = CENTER_WRAP
+    ws.row_dimensions[36].height = 30
 
-    ws["B21"] = "ALMACENAJE (si aplica)"
-    ws["E21"] = float(inp.almacenajes or 0)
-    ws["B22"] = "IVA"
-    ws["D22"] = "=E21*0.16"
+    # --- Detalle de extracción ---
+    fila = 38
+    _seccion(ws, fila, "DETALLE DE EXTRACCIÓN")
+    fila += 1
 
-    ws["B23"] = "FLETE MARITIMO"
-    ws["F23"] = float(inp.flete_maritimo_usd or 0)
-    ws["E23"] = "=F23*E2"
-    ws["B24"] = "IVA"
-
-    ws["B25"] = "FLETE LOCAL"
-    ws["E25"] = float(inp.flete_local or 0)
-    ws["F25"] = "=E25"
-    ws["G25"] = "Cuando es consolidado este flete terrestre entra como gasto de importacion."
-    ws["G25"].font = ITALICA
-    ws["B26"] = "IVA"
-    ws["D26"] = "=E25*0.16"
-
-    ws["B27"] = "POS. EN FALSO"
-    ws["E27"] = float(inp.falsos or 0)
-    ws["B28"] = "IVA"
-
-    ws["B29"] = "TOTAL GASTOS"
-    ws["B29"].font = NEGRITA
-    ws["D29"] = "=SUM(D13:D28)"
-    ws["E29"] = "=SUM(E13:E28)"
-    ws["D29"].font = NEGRITA
-    ws["E29"].font = NEGRITA
-
-    ws["D31"] = "TOTAL CUENTA DE GASTOS"
-    ws["D31"].font = NEGRITA
-    ws["E31"] = "=D29+E29"
-    ws["E31"].font = NEGRITA
-
-    # --- Costo del embarque ---
-    ws["D34"] = "TIPO DE CAMBIO"
-    ws["D34"].font = NEGRITA
-    ws["E34"] = "=E2"
-    ws["E34"].number_format = "0.0000"
-
-    ws["D35"] = "PESOS"
-    ws["E35"] = "DOLARES"
-    ws["D35"].font = NEGRITA
-    ws["E35"].font = NEGRITA
-    ws["D35"].fill = FONDO_HEADER
-    ws["E35"].fill = FONDO_HEADER
-
-    ws["B36"] = "FAC. PROVEEDOR"
-    ws["E36"] = float(inp.factura_proveedor_usd or 0)
-    ws["D36"] = "=E2*E36"
-
-    ws["B37"] = "CARGOS POR SERVICIOS DE TRANSFERENCIA"
-    ws["E37"] = float(inp.cargos_transferencia_usd or 0)
-    ws["D37"] = "=E37*E34"
-
-    ws["B38"] = "PRORRATEO GTOS. MEX. MN"
-    ws["D38"] = "=E29+D37"
-
-    ws["B41"] = "TOTAL DE EMBARQUE"
-    ws["B41"].font = Font(bold=True, size=12)
-    ws["D41"] = "=SUM(D36:D38)"
-    ws["D41"].font = Font(bold=True, size=12)
-
-    ws["B43"] = "% GASTO CONTRA LA FACTURA"
-    ws["B43"].font = NEGRITA
-    ws["C43"] = "=D38/D36"
-    ws["C43"].number_format = "0.00%"
-    ws["C43"].font = NEGRITA
-
-    # Formato de moneda para todas las celdas con dinero
-    for c in ("E13 D14 E15 D16 E17 D18 E19 F19 D20 E21 D22 E23 F23 "
-              "E25 F25 D26 E27 D29 E29 E31 D36 E36 D37 E37 D38 D41").split():
-        ws[c].number_format = FORMATO_MXN
-
-    # --- Bloque inferior: detalle de extracciones y selecciones ---
-    ws["A46"] = "Detalle de extracciones y selecciones"
-    ws["A46"].font = Font(bold=True, size=12, italic=True)
-    ws.merge_cells("A46:E46")
-
-    fila = 48
-    if detalle_pedimento:
+    if detalle_pedimento and any(detalle_pedimento.get(k) for k in
+                                  ("dta", "prv", "igi", "ieps", "iva", "iva_prv", "ieps_iva")):
         ws[f"A{fila}"] = "Contribuciones extraídas del pedimento:"
-        ws[f"A{fila}"].font = NEGRITA
-        ws.merge_cells(f"A{fila}:C{fila}")
+        ws[f"A{fila}"].font = ETIQUETA_FONT
+        ws.merge_cells(f"A{fila}:D{fila}")
         fila += 1
         for label, key in [("DTA", "dta"), ("PRV", "prv"), ("IGI", "igi"),
                            ("IEPS", "ieps"), ("IVA", "iva"),
                            ("IVA/PRV", "iva_prv"), ("IEPS/IVA", "ieps_iva")]:
             val = detalle_pedimento.get(key, 0) or 0
             if val:
-                ws[f"B{fila}"] = label
-                ws[f"C{fila}"] = float(val)
-                ws[f"C{fila}"].number_format = FORMATO_MXN
+                ws[f"A{fila}"] = label
+                ws[f"B{fila}"] = float(val)
+                ws[f"B{fila}"].number_format = FORMATO_MXN
                 fila += 1
         fila += 1
 
-    if mh_label:
-        ws[f"A{fila}"] = "Maniobras y honorarios (catálogo):"
-        ws[f"A{fila}"].font = NEGRITA
-        ws[f"D{fila}"] = mh_label
+    if mh_label or ft_label:
+        ws[f"A{fila}"] = "Tarifas elegidas del catálogo:"
+        ws[f"A{fila}"].font = ETIQUETA_FONT
+        ws.merge_cells(f"A{fila}:D{fila}")
         fila += 1
+        if mh_label:
+            ws[f"A{fila}"] = "Maniobras y honorarios"
+            ws[f"B{fila}"] = mh_label
+            fila += 1
+        if ft_label:
+            ws[f"A{fila}"] = "Flete local"
+            ws[f"B{fila}"] = ft_label
+            fila += 1
 
-    if ft_label:
-        ws[f"A{fila}"] = "Flete local / terrestre (catálogo):"
-        ws[f"A{fila}"].font = NEGRITA
-        ws[f"D{fila}"] = ft_label
-        fila += 1
-
-    # Anchos de columna
-    ws.column_dimensions["A"].width = 18
-    ws.column_dimensions["B"].width = 38
+    # --- Anchos de columna ---
+    ws.column_dimensions["A"].width = 38
+    ws.column_dimensions["B"].width = 22
     ws.column_dimensions["C"].width = 18
     ws.column_dimensions["D"].width = 18
-    ws.column_dimensions["E"].width = 18
-    ws.column_dimensions["F"].width = 14
-    ws.column_dimensions["G"].width = 50
 
     buf = BytesIO()
     wb.save(buf)
