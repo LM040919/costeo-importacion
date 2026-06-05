@@ -7,6 +7,7 @@ Ejecutar con:
 import pandas as pd
 import streamlit as st
 
+import descarga
 import flete
 import pedimento
 from costeo import CosteoInputs, calcular
@@ -44,10 +45,10 @@ st.caption(
 with st.expander("📄 Pedimento (PDF) — auto-rellenado", expanded=True):
     st.write(
         "Al subir el pedimento se rellenan solos el **tipo de cambio**, los "
-        "**impuestos** (DTA+PRV), el **IVA de aduana** (IVA+IVA/PRV) y la "
+        "**impuestos** (DTA+PRV), el **IVA** (IVA+IVA/PRV) y la "
         "**factura del proveedor** (USD). Los gastos de logística se capturan abajo."
     )
-    pdf = st.file_uploader("Arrastra el pedimento aquí", type="pdf")
+    pdf = st.file_uploader("Arrastra el pedimento aquí", type="pdf", key="up_ped")
     if pdf is not None:
         file_id = (pdf.name, pdf.size)
         if st.session_state.get("_ped_file") != file_id:
@@ -65,7 +66,6 @@ with st.expander("📄 Pedimento (PDF) — auto-rellenado", expanded=True):
                     val = datos.get(campo)
                     if val is not None:
                         st.session_state[campo] = val
-                st.rerun()
             except Exception as e:  # noqa: BLE001
                 st.error(f"No se pudo leer el pedimento: {e}")
         datos = st.session_state.get("_ped_datos", {})
@@ -78,7 +78,7 @@ with st.expander("📄 Pedimento (PDF) — auto-rellenado", expanded=True):
                 pd.DataFrame(
                     {
                         "Campo": ["Tipo de cambio", "Impuestos sin IVA",
-                                  "IVA de aduana", "Factura proveedor (USD)"],
+                                  "IVA", "Factura proveedor (USD)"],
                         "Valor extraído": [datos.get("tipo_cambio"), datos.get("impuestos"),
                                            datos.get("iva_aduana"), datos.get("factura_proveedor_usd")],
                     }
@@ -108,7 +108,6 @@ with st.expander("🚢 Factura del flete marítimo (PDF) — auto-rellenado", ex
                     st.session_state["flete_maritimo_usd"] = sub
                 if datos_f.get("orden"):
                     st.session_state["orden"] = datos_f["orden"]
-                st.rerun()
             except Exception as e:  # noqa: BLE001
                 st.error(f"No se pudo leer la factura: {e}")
         datos_f = st.session_state.get("_flete_datos", {})
@@ -141,7 +140,7 @@ with c1:
     proveedor = st.text_input("Proveedor", key="proveedor")
     tipo_cambio = st.number_input("Tipo de cambio (MXN/USD)", step=0.001, format="%.4f", key="tipo_cambio")
     impuestos = st.number_input("Impuestos sin IVA (MXN)", step=100.0, key="impuestos")
-    iva_aduana = st.number_input("IVA de aduana (MXN)", step=100.0, key="iva_aduana")
+    iva_aduana = st.number_input("IVA (MXN)", step=100.0, key="iva_aduana")
 
 with c2:
     st.markdown("**Gastos de agente aduanal / logística (MXN)**")
@@ -159,8 +158,8 @@ with c2:
         maniobras = 0.0
     honorarios = 0.0  # van incluidos en la tarifa de maniobras y honorarios
     otros_demoras = st.number_input("Demoras (si aplica)", value=0.0, step=100.0)
-    almacenajes = st.number_input("Almacenajes (si aplica)", value=0.0, step=100.0)
-    falsos = st.number_input("Falsos", value=0.0, step=100.0)
+    almacenajes = st.number_input("Almacenaje (si aplica)", value=0.0, step=100.0)
+    falsos = st.number_input("Pos. en falso", value=0.0, step=100.0)
     ft_labels, ft_mapa = flete_terrestre_opciones()
     ft_sel = st.selectbox(
         "Flete local / terrestre", ft_labels, index=None, placeholder="Selecciona…",
@@ -235,58 +234,23 @@ m3.metric(
          "Sube conforme agregas fletes y maniobras.",
 )
 
-col_izq, col_der = st.columns(2)
-
-with col_izq:
-    st.markdown("**Cuenta de gastos**")
-    st.caption("Desglose de cada gasto de importación; las últimas filas son los totales (sin IVA, IVA y total).")
-    gastos = pd.DataFrame(
-        {
-            "Concepto": [
-                "Impuestos (sin IVA)",
-                "Maniobras y honorarios",
-                "Demoras (si aplica)",
-                "Almacenajes",
-                "Flete marítimo",
-                "Flete local",
-                "Falsos",
-                "TOTAL gastos sin IVA",
-                "TOTAL IVA",
-                "TOTAL cuenta de gastos",
-            ],
-            "Monto (MXN)": [
-                impuestos, maniobras, otros_demoras, almacenajes,
-                r.flete_maritimo_mxn, flete_local, falsos,
-                r.total_gastos_sin_iva, r.total_gastos_iva, r.total_cuenta_gastos,
-            ],
-        }
-    )
-    st.dataframe(
-        gastos.style.format({"Monto (MXN)": "{:,.2f}"}),
-        hide_index=True, width="stretch",
-    )
-
-with col_der:
-    st.markdown("**Costo del embarque**")
-    embarque = pd.DataFrame(
-        {
-            "Concepto": [
-                "Factura proveedor (MXN)",
-                "Cargos por transferencia (MXN)",
-                "Prorrateo gastos México",
-                "TOTAL DE EMBARQUE",
-            ],
-            "Monto (MXN)": [
-                r.factura_proveedor_mxn, r.cargos_transferencia_mxn,
-                r.prorrateo_gastos, r.total_embarque,
-            ],
-        }
-    )
-    st.dataframe(
-        embarque.style.format({"Monto (MXN)": "{:,.2f}"}),
-        hide_index=True, width="stretch",
-    )
-    st.caption(
-        "Nota: el IVA es recuperable, por eso no se carga al costo. Solo los gastos "
-        "netos (sin IVA) se prorratean sobre la mercancía."
-    )
+nombre_base = inp.orden or (inp.no_pedimento or "sin_referencia").replace(" ", "_")
+st.download_button(
+    label="📥 Descargar costeo en Excel",
+    data=descarga.generar_xlsx(
+        inp, r,
+        detalle_pedimento=st.session_state.get("_ped_datos", {}),
+        mh_label=mh_sel if mh_sel and mh_sel != OTRO else None,
+        ft_label=ft_sel if ft_sel and ft_sel != OTRO else None,
+    ),
+    file_name=f"COSTEO ESTIMADO __ {nombre_base}.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    width="stretch",
+)
+st.caption(
+    "El Excel descargado replica la plantilla de Marisa (mismos campos y "
+    "totales), con fórmulas para que puedas seguir editando, e incluye al "
+    "final un bloque con el detalle de las extracciones del pedimento y las "
+    "tarifas elegidas del catálogo. Nota: el IVA es recuperable, por eso no "
+    "se carga al costo; solo los gastos netos se prorratean."
+)

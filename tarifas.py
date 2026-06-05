@@ -9,8 +9,8 @@ OTRO = "Otro (capturar monto)"
 # --- Flete terrestre / local (MXN, sin IVA) ---
 # Fuente: tarifas Luis, 2026-05-22.
 FLETE_TERRESTRE = [
-    {"proveedor": "Henco", "tipo": "Sencillo", "tarifa": 24250.0},
-    {"proveedor": "Henco", "tipo": "Full", "tarifa": 37500.0},
+    {"proveedor": "Henco", "tipo": "Sencillo", "tarifa": 26500.0},
+    {"proveedor": "Henco", "tipo": "Full", "tarifa": 42000.0},
     {"proveedor": "RTC", "tipo": "Full", "tarifa": 37000.0},
     {"proveedor": "GISAP", "tipo": "Sencillo", "tarifa": 24800.0},
 ]
