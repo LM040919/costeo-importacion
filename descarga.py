@@ -90,6 +90,7 @@ def generar_xlsx(inp, r, detalle_pedimento=None, mh_label=None, ft_label=None):
         ws[f"B{i}"] = valor
         if fmt:
             ws[f"B{i}"].number_format = fmt
+        ws.merge_cells(f"B{i}:D{i}")
     # Referencias clave (para uso interno en fórmulas):
     #   B6 = tipo de cambio
     #   B7 = factura proveedor (USD)
@@ -114,6 +115,7 @@ def generar_xlsx(inp, r, detalle_pedimento=None, mh_label=None, ft_label=None):
             ws[f"B{i}"].fill = RESALTAR_FILL
             ws[f"A{i}"].fill = RESALTAR_FILL
             ws.row_dimensions[i].height = 24
+        ws.merge_cells(f"B{i}:D{i}")
 
     # --- GASTOS DE IMPORTACIÓN ---
     _seccion(ws, 18, "GASTOS DE IMPORTACIÓN")
@@ -162,6 +164,7 @@ def generar_xlsx(inp, r, detalle_pedimento=None, mh_label=None, ft_label=None):
     ws["A30"].fill = HEADER_FILL
     ws["B30"].fill = HEADER_FILL
     ws["B30"].alignment = CENTER
+    ws.merge_cells("B30:D30")
 
     embarque = [
         ("Factura del proveedor", "=B7*B6"),
@@ -172,6 +175,7 @@ def generar_xlsx(inp, r, detalle_pedimento=None, mh_label=None, ft_label=None):
         ws[f"A{i}"] = label
         ws[f"B{i}"] = formula
         ws[f"B{i}"].number_format = FORMATO_MXN
+        ws.merge_cells(f"B{i}:D{i}")
 
     ws["A34"] = "TOTAL DE EMBARQUE"
     ws["A34"].font = RESALTAR_FONT
@@ -181,6 +185,7 @@ def generar_xlsx(inp, r, detalle_pedimento=None, mh_label=None, ft_label=None):
     ws["B34"].fill = RESALTAR_FILL
     ws["B34"].number_format = FORMATO_MXN
     ws.row_dimensions[34].height = 24
+    ws.merge_cells("B34:D34")
 
     # --- Nota ---
     ws.merge_cells("A36:D36")
@@ -209,6 +214,7 @@ def generar_xlsx(inp, r, detalle_pedimento=None, mh_label=None, ft_label=None):
                 ws[f"A{fila}"] = label
                 ws[f"B{fila}"] = float(val)
                 ws[f"B{fila}"].number_format = FORMATO_MXN
+                ws.merge_cells(f"B{fila}:D{fila}")
                 fila += 1
         fila += 1
 
@@ -220,10 +226,12 @@ def generar_xlsx(inp, r, detalle_pedimento=None, mh_label=None, ft_label=None):
         if mh_label:
             ws[f"A{fila}"] = "Maniobras y honorarios"
             ws[f"B{fila}"] = mh_label
+            ws.merge_cells(f"B{fila}:D{fila}")
             fila += 1
         if ft_label:
             ws[f"A{fila}"] = "Flete local"
             ws[f"B{fila}"] = ft_label
+            ws.merge_cells(f"B{fila}:D{fila}")
             fila += 1
 
     # --- Anchos de columna ---
