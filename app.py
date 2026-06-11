@@ -7,6 +7,7 @@ Ejecutar con:
 import pandas as pd
 import streamlit as st
 
+import auth
 import descarga
 import flete
 import pedimento
@@ -14,6 +15,11 @@ from costeo import CosteoInputs, calcular
 from tarifas import OTRO, flete_terrestre_opciones, maniobras_honorarios_opciones
 
 st.set_page_config(page_title="Costeo de importación", page_icon="📦", layout="wide")
+
+# --- Autenticación: nada se renderiza hasta iniciar sesión ---
+if not auth.login_gate():
+    st.stop()
+auth.sidebar_session()
 
 # Campos que se auto-rellenan desde documentos (manejados vía session_state).
 # REQ: siempre presentes en el pedimento; se sobreescriben al subir uno nuevo.
