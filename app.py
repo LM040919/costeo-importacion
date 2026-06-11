@@ -18,6 +18,18 @@ from tarifas import OTRO, flete_terrestre_opciones, maniobras_honorarios_opcione
 
 st.set_page_config(page_title="Costeo de importación", page_icon="📦", layout="wide")
 
+# Oculta el toolbar/menú/footer de Streamlit (refuerza el config.toml).
+st.markdown(
+    """
+    <style>
+      [data-testid="stToolbar"], [data-testid="stDecoration"],
+      [data-testid="stStatusWidget"], #MainMenu, footer {display: none !important;}
+      header[data-testid="stHeader"] {height: 0; visibility: hidden;}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # Campos que se auto-rellenan desde documentos (manejados vía session_state).
 # REQ: siempre presentes en el pedimento; se sobreescriben al subir uno nuevo.
 # OPC: a veces no aparecen (ej. la orden); solo se llenan si el documento las trae.
@@ -57,13 +69,22 @@ def _leer_cookie():
     return tok
 
 
-def _borrar_cookie():
+def cerrar_sesion():
+    """Callback de 'Cerrar sesión'. El borrado real de la cookie se hace de
+    forma diferida en el siguiente run (que no hace rerun inmediato), para que
+    el componente alcance a escribir el borrado en el navegador."""
+    auth.logout()
+    st.session_state["_no_restore"] = True
+    st.session_state["_logging_out"] = True
     st.session_state.pop("_session_token", None)
+
+
+# Borrado diferido de la cookie tras cerrar sesión (en un run sin rerun inmediato).
+if st.session_state.pop("_logging_out", False):
     try:
         cookie_ctrl.remove(auth.COOKIE_NAME)
     except Exception:  # noqa: BLE001
         pass
-
 
 # Restaurar sesión desde la cookie si no hay sesión activa
 if not auth.current_user() and not st.session_state.get("_no_restore"):
@@ -73,9 +94,19 @@ if not auth.current_user() and not st.session_state.get("_no_restore"):
 
 # Login
 if not auth.current_user():
+    # Darle UN ciclo al componente de cookies antes de mostrar el login, para que
+    # una sesión guardada se restaure sin que parpadee la pantalla de login.
+    if not st.session_state.get("_no_restore") and not st.session_state.get("_cookie_cycle"):
+        st.session_state["_cookie_cycle"] = True
+        st.markdown(
+            "<div style='text-align:center;margin-top:25vh;color:#888'>Cargando…</div>",
+            unsafe_allow_html=True,
+        )
+        st.stop()
     if auth.login_gate():
         st.session_state["_session_token"] = auth.make_token(auth.current_user()["username"])
         st.session_state.pop("_no_restore", None)
+        st.session_state.pop("_cookie_cycle", None)
         st.rerun()
     st.stop()
 
@@ -109,25 +140,18 @@ def ir(destino):
     st.session_state["nav"] = destino
 
 
-def sidebar_menu():
+def render_sidebar():
+    """Menú lateral con botones. Se muestra en todas las vistas menos Inicio."""
     u = auth.current_user()
-    opc = opciones_nav()
-    if st.session_state.get("nav") not in opc:
-        st.session_state["nav"] = INICIO
     with st.sidebar:
         st.markdown(f"**{u['name']}**")
         st.caption(u["username"])
         st.caption("Gerente" if auth.is_gerente() else "Usuario")
         st.divider()
-        for label in opc:
+        for label in opciones_nav():
             st.button(label, width="stretch", key=f"nav_{label}", on_click=ir, args=(label,))
         st.divider()
-        if st.button("Cerrar sesión", width="stretch", key="logout"):
-            _borrar_cookie()
-            auth.logout()
-            st.session_state["_no_restore"] = True
-            st.rerun()
-    return st.session_state["nav"]
+        st.button("Cerrar sesión", width="stretch", key="logout", on_click=cerrar_sesion)
 
 
 # ----------------------------------------------------------------------------
@@ -135,7 +159,16 @@ def sidebar_menu():
 # ----------------------------------------------------------------------------
 def render_inicio():
     u = auth.current_user()
-    st.title(f"📦 Hola, {u['name'].split()[0]}")
+    # En el Inicio se oculta el sidebar (sus opciones ya están como tarjetas).
+    st.markdown(
+        "<style>[data-testid='stSidebar'],[data-testid='stSidebarCollapsedControl']"
+        "{display:none !important;}</style>",
+        unsafe_allow_html=True,
+    )
+    cab_izq, cab_der = st.columns([4, 1])
+    cab_izq.title(f"📦 Hola, {u['name'].split()[0]}")
+    cab_der.caption(f"{u['name']}")
+    cab_der.button("Cerrar sesión", width="stretch", key="logout_inicio", on_click=cerrar_sesion)
     st.caption("¿Qué quieres hacer?")
 
     acciones = [("🧮", CALCULAR, "Sube el pedimento y la factura del flete, y obtén el costo total del embarque.")]
@@ -345,16 +378,22 @@ def render_calcular():
 
 
 # ----------------------------------------------------------------------------
-# Router
+# Router: el sidebar se muestra en todas las vistas MENOS en Inicio.
 # ----------------------------------------------------------------------------
-sel = sidebar_menu()
-if sel == CALCULAR:
+if st.session_state.get("nav") not in opciones_nav():
+    st.session_state["nav"] = INICIO
+vista = st.session_state["nav"]
+
+if vista != INICIO:
+    render_sidebar()
+
+if vista == CALCULAR:
     render_calcular()
-elif sel == TARIFAS and auth.is_gerente():
+elif vista == TARIFAS and auth.is_gerente():
     admin.render_tarifas_page()
-elif sel == USUARIOS and auth.is_gerente():
+elif vista == USUARIOS and auth.is_gerente():
     admin.render_usuarios_page()
-elif sel == MI_CUENTA:
+elif vista == MI_CUENTA:
     admin.render_mi_cuenta_page()
 else:
     render_inicio()
