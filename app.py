@@ -38,60 +38,77 @@ def mxn(x: float) -> str:
 
 # ----------------------------------------------------------------------------
 # Sesión: cookie persistente para no perder el login al recargar
+#   - LECTURA: st.context.cookies (nativo y síncrono; disponible al recargar).
+#   - ESCRITURA: CookieManager (escribe en el navegador para la próxima carga).
 # ----------------------------------------------------------------------------
 cookies = stx.CookieManager(key="costeo_cookies")
 
 
-def _cookie_get():
+def _escribir_cookie_pendiente():
+    """Escribe la cookie diferida en un run que NO hace rerun inmediato,
+    para no cortar la escritura del componente."""
+    tok = st.session_state.pop("_pending_cookie", None)
+    if tok:
+        try:
+            cookies.set(auth.COOKIE_NAME, tok,
+                        expires_at=datetime.now() + timedelta(days=auth.COOKIE_DIAS))
+        except Exception:  # noqa: BLE001
+            pass
+
+
+# Restaurar sesión desde la cookie (lectura nativa) si no hay sesión activa
+if not auth.current_user() and not st.session_state.get("_no_restore"):
     try:
-        return cookies.get(auth.COOKIE_NAME)
+        tok = st.context.cookies.get(auth.COOKIE_NAME)
     except Exception:  # noqa: BLE001
-        return None
-
-
-# Restaurar sesión desde la cookie si no hay sesión activa
-if not auth.current_user():
-    tok = _cookie_get()
+        tok = None
     if tok:
         auth.restore_from_token(tok)
 
 # Login
 if not auth.current_user():
     if auth.login_gate():
-        try:
-            cookies.set(
-                auth.COOKIE_NAME, auth.make_token(auth.current_user()["username"]),
-                expires_at=datetime.now() + timedelta(days=auth.COOKIE_DIAS),
-            )
-        except Exception:  # noqa: BLE001
-            pass
+        # Diferir la escritura de la cookie al siguiente run (sin rerun que la corte).
+        st.session_state["_pending_cookie"] = auth.make_token(auth.current_user()["username"])
+        st.session_state.pop("_no_restore", None)
         st.rerun()
     st.stop()
+
+# Ya con sesión: escribir la cookie pendiente (este run no hace rerun)
+_escribir_cookie_pendiente()
 
 
 # ----------------------------------------------------------------------------
 # Navegación (menú lateral)
 # ----------------------------------------------------------------------------
-st.session_state.setdefault("vista", "inicio")
+INICIO, CALCULAR, TARIFAS, USUARIOS, MI_CUENTA = (
+    "Inicio", "Calcular costeo", "Tarifas", "Usuarios", "Mi cuenta")
 
 
-def ir(v):
-    st.session_state["vista"] = v
+def opciones_nav():
+    opc = [INICIO, CALCULAR]
+    if auth.is_gerente():
+        opc += [TARIFAS, USUARIOS]
+    opc += [MI_CUENTA]
+    return opc
+
+
+def ir(destino):
+    """Callback de las tarjetas de Inicio: mueve el menú a otra sección."""
+    st.session_state["nav"] = destino
 
 
 def sidebar_menu():
     u = auth.current_user()
+    opc = opciones_nav()
+    if st.session_state.get("nav") not in opc:
+        st.session_state["nav"] = INICIO
     with st.sidebar:
-        st.markdown(f"### {u['name']}")
+        st.markdown(f"**{u['name']}**")
         st.caption(u["username"])
-        st.caption("👑 Gerente" if auth.is_gerente() else "Usuario")
+        st.caption("Gerente" if auth.is_gerente() else "Usuario")
         st.divider()
-        st.button("🏠 Inicio", width="stretch", on_click=ir, args=("inicio",))
-        st.button("🧮 Calcular costeo", width="stretch", on_click=ir, args=("calcular",))
-        if auth.is_gerente():
-            st.button("🚚 Tarifas", width="stretch", on_click=ir, args=("tarifas",))
-            st.button("👥 Usuarios", width="stretch", on_click=ir, args=("usuarios",))
-        st.button("🔑 Mi cuenta", width="stretch", on_click=ir, args=("mi_cuenta",))
+        sel = st.radio("Menú", opc, key="nav", label_visibility="collapsed")
         st.divider()
         if st.button("Cerrar sesión", width="stretch"):
             try:
@@ -99,7 +116,9 @@ def sidebar_menu():
             except Exception:  # noqa: BLE001
                 pass
             auth.logout()
+            st.session_state["_no_restore"] = True
             st.rerun()
+    return sel
 
 
 # ----------------------------------------------------------------------------
@@ -110,21 +129,21 @@ def render_inicio():
     st.title(f"📦 Hola, {u['name'].split()[0]}")
     st.caption("¿Qué quieres hacer?")
 
-    acciones = [("🧮", "Calcular costeo", "Sube el pedimento y la factura del flete, y obtén el costo total del embarque.", "calcular")]
+    acciones = [("🧮", CALCULAR, "Sube el pedimento y la factura del flete, y obtén el costo total del embarque.")]
     if auth.is_gerente():
         acciones += [
-            ("🚚", "Tarifas", "Administra el catálogo de tarifas de fletes y agentes aduanales.", "tarifas"),
-            ("👥", "Usuarios", "Da de alta, edita o desactiva usuarios y sus roles.", "usuarios"),
+            ("🚚", TARIFAS, "Administra el catálogo de tarifas de fletes y agentes aduanales."),
+            ("👥", USUARIOS, "Da de alta, edita o desactiva usuarios y sus roles."),
         ]
-    acciones += [("🔑", "Mi cuenta", "Cambia tu contraseña.", "mi_cuenta")]
+    acciones += [("🔑", MI_CUENTA, "Cambia tu contraseña.")]
 
-    cols = st.columns(min(len(acciones), 3))
-    for i, (icono, titulo, desc, vista) in enumerate(acciones):
-        with cols[i % len(cols)]:
+    cols = st.columns(2)
+    for i, (icono, titulo, desc) in enumerate(acciones):
+        with cols[i % 2]:
             with st.container(border=True):
                 st.markdown(f"### {icono} {titulo}")
                 st.caption(desc)
-                st.button("Abrir", key=f"card_{vista}", width="stretch", on_click=ir, args=(vista,))
+                st.button("Abrir", key=f"card_{titulo}", width="stretch", on_click=ir, args=(titulo,))
 
 
 # ----------------------------------------------------------------------------
@@ -319,15 +338,14 @@ def render_calcular():
 # ----------------------------------------------------------------------------
 # Router
 # ----------------------------------------------------------------------------
-sidebar_menu()
-vista = st.session_state["vista"]
-if vista == "calcular":
+sel = sidebar_menu()
+if sel == CALCULAR:
     render_calcular()
-elif vista == "tarifas" and auth.is_gerente():
+elif sel == TARIFAS and auth.is_gerente():
     admin.render_tarifas_page()
-elif vista == "usuarios" and auth.is_gerente():
+elif sel == USUARIOS and auth.is_gerente():
     admin.render_usuarios_page()
-elif vista == "mi_cuenta":
+elif sel == MI_CUENTA:
     admin.render_mi_cuenta_page()
 else:
     render_inicio()
