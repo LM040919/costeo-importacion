@@ -18,18 +18,6 @@ from tarifas import OTRO, flete_terrestre_opciones, maniobras_honorarios_opcione
 
 st.set_page_config(page_title="Costeo de importación", page_icon="📦", layout="wide")
 
-# Oculta el toolbar/menú/footer de Streamlit (refuerza el config.toml).
-st.markdown(
-    """
-    <style>
-      [data-testid="stToolbar"], [data-testid="stDecoration"],
-      [data-testid="stStatusWidget"], #MainMenu, footer {display: none !important;}
-      header[data-testid="stHeader"] {height: 0; visibility: hidden;}
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
 # Campos que se auto-rellenan desde documentos (manejados vía session_state).
 # REQ: siempre presentes en el pedimento; se sobreescriben al subir uno nuevo.
 # OPC: a veces no aparecen (ej. la orden); solo se llenan si el documento las trae.
