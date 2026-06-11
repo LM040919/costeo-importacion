@@ -7,6 +7,7 @@ Ejecutar con:
 import pandas as pd
 import streamlit as st
 
+import admin
 import auth
 import descarga
 import flete
@@ -20,6 +21,7 @@ st.set_page_config(page_title="Costeo de importación", page_icon="📦", layout
 if not auth.login_gate():
     st.stop()
 auth.sidebar_session()
+admin.render_mi_cuenta()
 
 # Campos que se auto-rellenan desde documentos (manejados vía session_state).
 # REQ: siempre presentes en el pedimento; se sobreescriben al subir uno nuevo.
@@ -44,6 +46,9 @@ st.caption(
     "Sube el pedimento para auto-rellenar los datos fiscales, luego elige o captura "
     "los costos de logística. El costo total se recalcula al instante."
 )
+
+# Panel de administración (solo gerentes; no estorba a los demás)
+admin.render_admin()
 
 # ----------------------------------------------------------------------------
 # 1) Pedimento (PDF) — extracción y auto-rellenado

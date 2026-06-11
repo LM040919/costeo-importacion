@@ -21,6 +21,8 @@ import hmac
 
 import streamlit as st
 
+import db
+
 _ITERATIONS = 200_000
 _ALGO = "sha256"
 
@@ -48,6 +50,9 @@ def verify(password: str, stored: str) -> bool:
 
 
 def _users():
+    """Usuarios desde la base de datos si está configurada; si no, desde secrets."""
+    if db.enabled():
+        return db.list_usuarios()
     try:
         return list(st.secrets["auth"]["users"])
     except Exception:  # noqa: BLE001 — sin secrets configurados
@@ -82,7 +87,7 @@ def login_gate() -> bool:
     if not _users():
         st.error(
             "No hay usuarios configurados. Falta el bloque [auth] en los secrets "
-            "de la app (Manage app → Settings → Secrets en Streamlit Cloud)."
+            "(o conectar la base de datos) en Manage app → Settings → Secrets."
         )
         return False
 
@@ -123,3 +128,20 @@ def sidebar_session():
         if st.button("Cerrar sesión", width="stretch"):
             del st.session_state["_auth_user"]
             st.rerun()
+
+
+def cambiar_password(username: str, actual: str, nueva: str) -> tuple[bool, str]:
+    """Cambia la contraseña del usuario tras verificar la actual.
+
+    Requiere base de datos (los secrets son de solo lectura en runtime).
+    Devuelve (ok, mensaje).
+    """
+    if not db.enabled():
+        return False, "El cambio de contraseña requiere base de datos (Fase 2)."
+    entry = db.get_usuario(username)
+    if not entry or not verify(actual, str(entry.get("password", ""))):
+        return False, "La contraseña actual no es correcta."
+    if len(nueva) < 6:
+        return False, "La nueva contraseña debe tener al menos 6 caracteres."
+    db.set_password(username, make_password(nueva))
+    return True, "Contraseña actualizada."
