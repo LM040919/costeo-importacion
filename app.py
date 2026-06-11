@@ -4,11 +4,9 @@ Ejecutar con:
     .venv/bin/streamlit run app.py
 """
 
-from datetime import datetime, timedelta
-
-import extra_streamlit_components as stx
 import pandas as pd
 import streamlit as st
+from streamlit_cookies_controller import CookieController
 
 import admin
 import auth
@@ -37,45 +35,58 @@ def mxn(x: float) -> str:
 
 
 # ----------------------------------------------------------------------------
-# Sesión: cookie persistente para no perder el login al recargar
-#   - LECTURA: st.context.cookies (nativo y síncrono; disponible al recargar).
-#   - ESCRITURA: CookieManager (escribe en el navegador para la próxima carga).
+# Sesión: cookie persistente para no perder el login al recargar.
+#   - LECTURA: st.context.cookies (nativo y síncrono al recargar) + respaldo.
+#   - ESCRITURA: CookieController, en CADA run con token estable y max_age fijo
+#     (sin 'expires' que cambie cada run, para no provocar reruns en bucle).
 # ----------------------------------------------------------------------------
-cookies = stx.CookieManager(key="costeo_cookies")
+cookie_ctrl = CookieController(key="costeo_cookie_ctrl")
+_COOKIE_MAXAGE = auth.COOKIE_DIAS * 86400
 
 
-def _escribir_cookie_pendiente():
-    """Escribe la cookie diferida en un run que NO hace rerun inmediato,
-    para no cortar la escritura del componente."""
-    tok = st.session_state.pop("_pending_cookie", None)
-    if tok:
-        try:
-            cookies.set(auth.COOKIE_NAME, tok,
-                        expires_at=datetime.now() + timedelta(days=auth.COOKIE_DIAS))
-        except Exception:  # noqa: BLE001
-            pass
-
-
-# Restaurar sesión desde la cookie (lectura nativa) si no hay sesión activa
-if not auth.current_user() and not st.session_state.get("_no_restore"):
+def _leer_cookie():
     try:
         tok = st.context.cookies.get(auth.COOKIE_NAME)
     except Exception:  # noqa: BLE001
         tok = None
-    if tok:
-        auth.restore_from_token(tok)
+    if not tok:
+        try:
+            tok = cookie_ctrl.get(auth.COOKIE_NAME)
+        except Exception:  # noqa: BLE001
+            tok = None
+    return tok
+
+
+def _borrar_cookie():
+    st.session_state.pop("_session_token", None)
+    try:
+        cookie_ctrl.remove(auth.COOKIE_NAME)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+# Restaurar sesión desde la cookie si no hay sesión activa
+if not auth.current_user() and not st.session_state.get("_no_restore"):
+    tok = _leer_cookie()
+    if tok and auth.restore_from_token(tok):
+        st.session_state["_session_token"] = tok
 
 # Login
 if not auth.current_user():
     if auth.login_gate():
-        # Diferir la escritura de la cookie al siguiente run (sin rerun que la corte).
-        st.session_state["_pending_cookie"] = auth.make_token(auth.current_user()["username"])
+        st.session_state["_session_token"] = auth.make_token(auth.current_user()["username"])
         st.session_state.pop("_no_restore", None)
         st.rerun()
     st.stop()
 
-# Ya con sesión: escribir la cookie pendiente (este run no hace rerun)
-_escribir_cookie_pendiente()
+# Ya con sesión: (re)escribir la cookie en cada run para mantenerla viva.
+_tok = st.session_state.get("_session_token") or _leer_cookie()
+if _tok:
+    st.session_state["_session_token"] = _tok
+    try:
+        cookie_ctrl.set(auth.COOKIE_NAME, _tok, max_age=_COOKIE_MAXAGE, same_site="lax")
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # ----------------------------------------------------------------------------
@@ -108,17 +119,15 @@ def sidebar_menu():
         st.caption(u["username"])
         st.caption("Gerente" if auth.is_gerente() else "Usuario")
         st.divider()
-        sel = st.radio("Menú", opc, key="nav", label_visibility="collapsed")
+        for label in opc:
+            st.button(label, width="stretch", key=f"nav_{label}", on_click=ir, args=(label,))
         st.divider()
-        if st.button("Cerrar sesión", width="stretch"):
-            try:
-                cookies.delete(auth.COOKIE_NAME)
-            except Exception:  # noqa: BLE001
-                pass
+        if st.button("Cerrar sesión", width="stretch", key="logout"):
+            _borrar_cookie()
             auth.logout()
             st.session_state["_no_restore"] = True
             st.rerun()
-    return sel
+    return st.session_state["nav"]
 
 
 # ----------------------------------------------------------------------------

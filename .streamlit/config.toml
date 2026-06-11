@@ -1,0 +1,6 @@
+[client]
+# Oculta el toolbar de Streamlit (Share, GitHub, editar, menú ⋮) para todos.
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
