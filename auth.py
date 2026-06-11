@@ -18,6 +18,7 @@ Roles:
 
 import hashlib
 import hmac
+import time
 
 import streamlit as st
 
@@ -25,6 +26,10 @@ import db
 
 _ITERATIONS = 200_000
 _ALGO = "sha256"
+
+# Cookie de sesión persistente (para no perder la sesión al recargar).
+COOKIE_NAME = "costeo_session"
+COOKIE_DIAS = 7
 
 
 def _hash(password: str, salt: bytes) -> bytes:
@@ -71,6 +76,52 @@ def current_user():
     return st.session_state.get("_auth_user")
 
 
+# ------------------------------------------------------------------
+# Token de sesión (firmado) para la cookie persistente
+# ------------------------------------------------------------------
+def _signing_key() -> bytes:
+    """Clave para firmar el token de sesión, derivada de un secreto estable."""
+    try:
+        base = st.secrets["supabase"]["key"]
+    except Exception:  # noqa: BLE001
+        base = "costeo-dev-signing-key"
+    return hashlib.sha256(b"sig:" + base.encode()).digest()
+
+
+def make_token(username: str) -> str:
+    exp = int(time.time()) + COOKIE_DIAS * 86400
+    msg = f"{username}|{exp}"
+    sig = hmac.new(_signing_key(), msg.encode(), hashlib.sha256).hexdigest()
+    return f"{msg}|{sig}"
+
+
+def _parse_token(token: str):
+    try:
+        username, exp, sig = token.split("|")
+        if int(exp) < time.time():
+            return None
+        good = hmac.new(_signing_key(), f"{username}|{exp}".encode(), hashlib.sha256).hexdigest()
+        return username if hmac.compare_digest(good, sig) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def restore_from_token(token: str) -> bool:
+    """Restaura la sesión desde un token de cookie válido. Devuelve True si pudo."""
+    username = _parse_token(token or "")
+    if not username:
+        return False
+    entry = _find(username)
+    if not entry:
+        return False
+    st.session_state["_auth_user"] = {
+        "username": entry["username"],
+        "name": entry.get("name", entry["username"]),
+        "role": entry.get("role", "usuario"),
+    }
+    return True
+
+
 def is_gerente() -> bool:
     u = current_user()
     return bool(u) and u.get("role") == "gerente"
@@ -104,30 +155,13 @@ def login_gate() -> bool:
                 "name": entry.get("name", entry["username"]),
                 "role": entry.get("role", "usuario"),
             }
-            st.rerun()
-        else:
-            st.error("Usuario o contraseña incorrectos.")
+            return True  # el caller guarda la cookie y recarga
+        st.error("Usuario o contraseña incorrectos.")
     return False
 
 
-def sidebar_session():
-    """Muestra quién está logueado, su rol y el botón de cerrar sesión."""
-    u = current_user()
-    if not u:
-        return
-    with st.sidebar:
-        st.markdown(f"**{u['name']}**")
-        st.caption(u["username"])
-        rol = "Gerente" if u["role"] == "gerente" else "Usuario"
-        st.caption(f"Rol: {rol}")
-        if is_gerente():
-            st.info(
-                "Acceso de gerente. La administración de tarifas y usuarios "
-                "se habilita en la siguiente fase."
-            )
-        if st.button("Cerrar sesión", width="stretch"):
-            del st.session_state["_auth_user"]
-            st.rerun()
+def logout():
+    st.session_state.pop("_auth_user", None)
 
 
 def cambiar_password(username: str, actual: str, nueva: str) -> tuple[bool, str]:

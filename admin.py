@@ -19,46 +19,59 @@ CATEGORIAS = {
 # ==================================================================
 # Mi cuenta (cualquier usuario logueado): cambiar contraseña
 # ==================================================================
-def render_mi_cuenta():
+def render_mi_cuenta_page():
     u = auth.current_user()
     if not u:
         return
-    with st.sidebar.expander("🔑 Mi cuenta"):
-        if not db.enabled():
-            st.caption("El cambio de contraseña se habilita al conectar la base de datos.")
-            return
-        with st.form("cambiar_pw", clear_on_submit=True):
-            actual = st.text_input("Contraseña actual", type="password")
-            nueva = st.text_input("Nueva contraseña", type="password")
-            confirma = st.text_input("Confirmar nueva", type="password")
-            ok = st.form_submit_button("Cambiar contraseña")
-        if ok:
-            if nueva != confirma:
-                st.error("La nueva contraseña y su confirmación no coinciden.")
-            else:
-                exito, msg = auth.cambiar_password(u["username"], actual, nueva)
-                (st.success if exito else st.error)(msg)
+    st.subheader("🔑 Mi cuenta")
+    st.caption(f"{u['name']} · {u['username']} · "
+               f"{'Gerente' if u['role'] == 'gerente' else 'Usuario'}")
+    st.divider()
+    st.markdown("**Cambiar contraseña**")
+    if not db.enabled():
+        st.info("El cambio de contraseña se habilita al conectar la base de datos.")
+        return
+    with st.form("cambiar_pw", clear_on_submit=True):
+        actual = st.text_input("Contraseña actual", type="password")
+        nueva = st.text_input("Nueva contraseña", type="password")
+        confirma = st.text_input("Confirmar nueva", type="password")
+        ok = st.form_submit_button("Cambiar contraseña")
+    if ok:
+        if nueva != confirma:
+            st.error("La nueva contraseña y su confirmación no coinciden.")
+        else:
+            exito, msg = auth.cambiar_password(u["username"], actual, nueva)
+            (st.success if exito else st.error)(msg)
 
 
 # ==================================================================
-# Administración (solo gerentes)
+# Administración (solo gerentes) — páginas de tarifas y usuarios
 # ==================================================================
-def render_admin():
+def _sin_db():
+    st.info(
+        "Esta sección requiere la base de datos (Supabase). Mientras no esté "
+        "conectada, el catálogo y los usuarios vienen de la configuración del código."
+    )
+
+
+def render_tarifas_page():
     if not auth.is_gerente():
         return
-    with st.expander("⚙️ Administración (gerentes)", expanded=False):
-        if not db.enabled():
-            st.info(
-                "La administración de tarifas y usuarios se habilita al conectar "
-                "la base de datos (Supabase). Mientras tanto, el catálogo y los "
-                "usuarios vienen de la configuración del código."
-            )
-            return
-        tab_tarifas, tab_usuarios = st.tabs(["Tarifas", "Usuarios"])
-        with tab_tarifas:
-            _admin_tarifas()
-        with tab_usuarios:
-            _admin_usuarios()
+    st.subheader("🚚 Tarifas")
+    if not db.enabled():
+        _sin_db()
+        return
+    _admin_tarifas()
+
+
+def render_usuarios_page():
+    if not auth.is_gerente():
+        return
+    st.subheader("👥 Usuarios")
+    if not db.enabled():
+        _sin_db()
+        return
+    _admin_usuarios()
 
 
 def _admin_tarifas():

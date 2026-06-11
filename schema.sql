@@ -54,9 +54,9 @@ alter table costeo_tarifas  enable row level security;
 -- ============================================================
 insert into costeo_tarifas (categoria, proveedor, tipo, tarifa) values
     ('flete_terrestre',      'Henco',    'Sencillo', 26500),
-    ('flete_terrestre',      'Henco',    'Full',     42000),
+    ('flete_terrestre',      'Henco',    'Full',     21000),
     ('flete_terrestre',      'RTC',      'Full',     37000),
     ('flete_terrestre',      'GISAP',    'Sencillo', 24800),
-    ('maniobras_honorarios', 'WISE',     null,       20640),
-    ('maniobras_honorarios', 'WOODWARD', null,       18192.50)
+    ('maniobras_honorarios', 'WISE',     null,       13790),
+    ('maniobras_honorarios', 'WOODWARD', null,       18192.50)   -- WOODWARD: pendiente de actualizar
 on conflict (categoria, proveedor, coalesce(tipo, '')) do nothing;

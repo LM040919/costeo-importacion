@@ -12,16 +12,16 @@ import db
 OTRO = "Otro (capturar monto)"
 
 # --- Respaldo (cuando no hay base de datos) ---
-# Fuente: tarifas Luis. Henco actualizado 2026-06-05.
+# Fuente: tarifas Luis. Actualizado 2026-06-11 (Henco Full y WISE).
 FLETE_TERRESTRE = [
     {"proveedor": "Henco", "tipo": "Sencillo", "tarifa": 26500.0},
-    {"proveedor": "Henco", "tipo": "Full", "tarifa": 42000.0},
+    {"proveedor": "Henco", "tipo": "Full", "tarifa": 21000.0},
     {"proveedor": "RTC", "tipo": "Full", "tarifa": 37000.0},
     {"proveedor": "GISAP", "tipo": "Sencillo", "tarifa": 24800.0},
 ]
 MANIOBRAS_HONORARIOS = [
-    {"proveedor": "WISE", "tarifa": 20640.0},
-    {"proveedor": "WOODWARD", "tarifa": 18192.50},
+    {"proveedor": "WISE", "tarifa": 13790.0},
+    {"proveedor": "WOODWARD", "tarifa": 18192.50},  # pendiente de actualizar
 ]
 
 
