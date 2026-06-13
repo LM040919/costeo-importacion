@@ -339,21 +339,25 @@ def render_calcular():
     st.subheader("Ingresos (Done)")
     ordenes_bq = bq.parse_ordenes(orden)
     if not bq.enabled():
-        st.caption("Conecta BigQuery (credenciales en secrets) para buscar los ingresos.")
+        st.session_state["_ingresos"] = []
+        st.caption("Conecta BigQuery (credenciales en secrets) para ver los ingresos.")
     elif not ordenes_bq:
-        st.caption("Captura al menos una orden (CM###-##) para buscar sus ingresos.")
+        st.session_state["_ingresos"] = []
+        st.caption("Captura al menos una orden (CM###-##) para ver sus ingresos.")
     else:
-        if st.button("🔄 Buscar ingresos en BigQuery", key="btn_bq"):
-            with st.spinner("Consultando BigQuery…"):
-                st.session_state["_ingresos"] = bq.ingresos_done(tuple(sorted(ordenes_bq)))
-            st.session_state["_ingresos_ordenes"] = ordenes_bq
-        ingresos = st.session_state.get("_ingresos", [])
-        if st.session_state.get("_ingresos_ordenes") not in (None, ordenes_bq):
-            st.caption("Las órdenes cambiaron; vuelve a buscar para actualizar los ingresos.")
+        # Se cargan solos; la consulta está cacheada por conjunto de órdenes,
+        # así que solo consulta BigQuery cuando cambian las órdenes.
+        try:
+            with st.spinner("Buscando ingresos…"):
+                ingresos = bq.ingresos_done(tuple(sorted(ordenes_bq)))
+        except Exception as e:  # noqa: BLE001
+            ingresos = []
+            st.warning(f"No se pudieron consultar los ingresos: {e}")
+        st.session_state["_ingresos"] = ingresos
         if ingresos:
             for row in ingresos:
                 st.write(f"- **{row['ingreso']}**  · orden {row['orden']} · {row['po']}")
-        elif "_ingresos" in st.session_state:
+        else:
             st.caption("No se encontraron entradas en estado Done para esas órdenes.")
 
     # 3) Resultados

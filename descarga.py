@@ -87,7 +87,6 @@ def generar_xlsx(inp, r, detalle_pedimento=None, mh_label=None, ft_label=None, i
         ("Flete marítimo (USD)", float(inp.flete_maritimo_usd or 0), FORMATO_MXN),
         ("Cargos por transferencia (USD)", float(inp.cargos_transferencia_usd or 0), FORMATO_MXN),
         ("Fecha", date.today(), "yyyy-mm-dd"),
-        ("Landed cost", inp.landed_cost or "", None),
     ]
     for i, (etiqueta, valor, fmt) in enumerate(datos, start=3):
         ws[f"A{i}"] = etiqueta
@@ -201,6 +200,13 @@ def generar_xlsx(inp, r, detalle_pedimento=None, mh_label=None, ft_label=None, i
     ws.row_dimensions[36].height = 30
 
     fila = 38
+
+    # --- Landed cost (sección propia; vacía si no se capturó) ---
+    _seccion(ws, fila, "LANDED COST")
+    fila += 1
+    ws[f"A{fila}"] = inp.landed_cost or ""
+    ws.merge_cells(f"A{fila}:D{fila}")
+    fila += 2
 
     # --- Ingresos (Done) relacionados a las órdenes ---
     if ingresos:
