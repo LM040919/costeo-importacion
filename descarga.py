@@ -51,7 +51,7 @@ def _seccion(ws, fila, texto, columnas=4):
     cell.alignment = CENTER
 
 
-def generar_xlsx(inp, r, detalle_pedimento=None, mh_label=None, ft_label=None):
+def generar_xlsx(inp, r, detalle_pedimento=None, mh_label=None, ft_label=None, ingresos=None):
     """Construye el .xlsx del costeo y devuelve sus bytes.
 
     Args:
@@ -60,6 +60,7 @@ def generar_xlsx(inp, r, detalle_pedimento=None, mh_label=None, ft_label=None):
         detalle_pedimento: dict opcional con dta/prv/igi/iva/iva_prv/ieps...
         mh_label: etiqueta del selector de maniobras (ej. "WISE ($20,640.00)").
         ft_label: etiqueta del selector de flete terrestre.
+        ingresos: lista opcional de folios de ingreso 'Done' (ej. MV1/IN/13806).
     """
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -199,8 +200,19 @@ def generar_xlsx(inp, r, detalle_pedimento=None, mh_label=None, ft_label=None):
     ws["A36"].alignment = CENTER_WRAP
     ws.row_dimensions[36].height = 30
 
-    # --- Detalle de extracción ---
     fila = 38
+
+    # --- Ingresos (Done) relacionados a las órdenes ---
+    if ingresos:
+        _seccion(ws, fila, "INGRESOS (Done)")
+        fila += 1
+        for folio in ingresos:
+            ws[f"A{fila}"] = folio
+            ws.merge_cells(f"A{fila}:D{fila}")
+            fila += 1
+        fila += 1
+
+    # --- Detalle de extracción ---
     _seccion(ws, fila, "DETALLE DE EXTRACCIÓN")
     fila += 1
 

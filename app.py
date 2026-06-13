@@ -10,6 +10,7 @@ from streamlit_cookies_controller import CookieController
 
 import admin
 import auth
+import bq
 import descarga
 import flete
 import pedimento
@@ -333,6 +334,28 @@ def render_calcular():
     )
     r = calcular(inp)
 
+    # 2b) Ingresos (entradas de almacén "Done") relacionadas a las órdenes — desde BigQuery
+    st.divider()
+    st.subheader("Ingresos (Done)")
+    ordenes_bq = bq.parse_ordenes(orden)
+    if not bq.enabled():
+        st.caption("Conecta BigQuery (credenciales en secrets) para buscar los ingresos.")
+    elif not ordenes_bq:
+        st.caption("Captura al menos una orden (CM###-##) para buscar sus ingresos.")
+    else:
+        if st.button("🔄 Buscar ingresos en BigQuery", key="btn_bq"):
+            with st.spinner("Consultando BigQuery…"):
+                st.session_state["_ingresos"] = bq.ingresos_done(tuple(sorted(ordenes_bq)))
+            st.session_state["_ingresos_ordenes"] = ordenes_bq
+        ingresos = st.session_state.get("_ingresos", [])
+        if st.session_state.get("_ingresos_ordenes") not in (None, ordenes_bq):
+            st.caption("Las órdenes cambiaron; vuelve a buscar para actualizar los ingresos.")
+        if ingresos:
+            for row in ingresos:
+                st.write(f"- **{row['ingreso']}**  · orden {row['orden']} · {row['po']}")
+        elif "_ingresos" in st.session_state:
+            st.caption("No se encontraron entradas en estado Done para esas órdenes.")
+
     # 3) Resultados
     st.divider()
     st.subheader("Resultado")
@@ -366,6 +389,7 @@ def render_calcular():
             detalle_pedimento=st.session_state.get("_ped_datos", {}),
             mh_label=mh_sel if mh_sel and mh_sel != OTRO else None,
             ft_label=ft_sel if ft_sel and ft_sel != OTRO else None,
+            ingresos=[row["ingreso"] for row in st.session_state.get("_ingresos", [])],
         ),
         file_name=f"COSTEO ESTIMADO __ {nombre_base}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
