@@ -74,8 +74,11 @@ def generar_xlsx(inp, r, detalle_pedimento=None, mh_label=None, ft_label=None):
     ws.row_dimensions[1].height = 28
 
     # --- Datos del embarque (fila 3-10). Los formularios referencian a estas celdas. ---
+    # OJO: el orden de estas filas es importante. Las fórmulas usan referencias
+    # fijas: B6 = tipo de cambio, B7 = factura USD, B8 = flete USD, B9 = cargos.
+    # Si agregas filas, hazlo DESPUÉS de la fila 9 para no romper esas referencias.
     datos = [
-        ("Orden", inp.orden or "", None),
+        ("Órdenes", inp.orden or "", None),
         ("No. pedimento", inp.no_pedimento or "", None),
         ("Proveedor", inp.proveedor or "", None),
         ("Tipo de cambio", float(inp.tipo_cambio or 0), FORMATO_TC),
@@ -83,6 +86,7 @@ def generar_xlsx(inp, r, detalle_pedimento=None, mh_label=None, ft_label=None):
         ("Flete marítimo (USD)", float(inp.flete_maritimo_usd or 0), FORMATO_MXN),
         ("Cargos por transferencia (USD)", float(inp.cargos_transferencia_usd or 0), FORMATO_MXN),
         ("Fecha", date.today(), "yyyy-mm-dd"),
+        ("Landed cost", inp.landed_cost or "", None),
     ]
     for i, (etiqueta, valor, fmt) in enumerate(datos, start=3):
         ws[f"A{i}"] = etiqueta

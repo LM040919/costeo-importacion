@@ -37,9 +37,15 @@ def extraer(archivo):
     m = re.search(r"Total\s*\([A-Z]{3}\)\s*:\s*([\d,]+\.\d{2})", texto)
     d["total"] = float(m.group(1).replace(",", "")) if m else None
 
-    # Orden interna (folio CM###-## o CM###-##-#); a veces aparece como "P.O. Reference".
-    m = re.search(r"CM\d{2,4}-\d{2}(?:-\d{1,2})?", texto)
-    d["orden"] = m.group(0) if m else None
+    # Órdenes internas (folios CM###-## o CM###-##-#). Una factura puede traer
+    # VARIAS órdenes; se capturan todas, en orden y sin duplicados. El patrón
+    # excluye el texto sobrante (ej. "（part of）") y el sello digital (sin guion).
+    ordenes = []
+    for m in re.findall(r"CM\d{2,4}-\d{2}(?:-\d{1,2})?", texto):
+        if m not in ordenes:
+            ordenes.append(m)
+    d["ordenes"] = ordenes
+    d["orden"] = ordenes[0] if ordenes else None  # compatibilidad
 
     return d
 

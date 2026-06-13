@@ -62,6 +62,7 @@ class CosteoInputs:
     proveedor: str = ""
     elaboro: str = ""
     fecha: str = ""
+    landed_cost: str = ""   # folio de landed cost (lo capturan ellas, ej. LC/2026/3293)
 
 
 @dataclass

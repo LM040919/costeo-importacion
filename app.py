@@ -23,7 +23,7 @@ st.set_page_config(page_title="Costeo de importación", page_icon="📦", layout
 # OPC: a veces no aparecen (ej. la orden); solo se llenan si el documento las trae.
 CAMPOS_PEDIMENTO_REQ = ("proveedor", "no_pedimento", "tipo_cambio", "impuestos", "iva_aduana", "factura_proveedor_usd")
 CAMPOS_PEDIMENTO_OPC = ("orden",)
-_INICIAL = {"orden": "", "proveedor": "", "no_pedimento": "",
+_INICIAL = {"orden": "", "proveedor": "", "no_pedimento": "", "landed_cost": "",
             "tipo_cambio": 0.0, "impuestos": 0.0, "iva_aduana": 0.0,
             "factura_proveedor_usd": 0.0, "flete_maritimo_usd": 0.0}
 for _campo, _val in _INICIAL.items():
@@ -243,8 +243,9 @@ def render_calcular():
                     sub = datos_f.get("flete_subtotal")
                     if sub is not None and datos_f.get("moneda") == "USD":
                         st.session_state["flete_maritimo_usd"] = sub
-                    if datos_f.get("orden"):
-                        st.session_state["orden"] = datos_f["orden"]
+                    ordenes = datos_f.get("ordenes") or []
+                    if ordenes:
+                        st.session_state["orden"] = ", ".join(ordenes)
                 except Exception as e:  # noqa: BLE001
                     st.error(f"No se pudo leer la factura: {e}")
             datos_f = st.session_state.get("_flete_datos", {})
@@ -258,6 +259,13 @@ def render_calcular():
                     )
                 else:
                     st.warning("No pude detectar el subtotal en la factura.")
+                ordenes = datos_f.get("ordenes") or []
+                if ordenes:
+                    st.info(
+                        f"Órdenes detectadas: **{', '.join(ordenes)}**. "
+                        "Revisa abajo en el campo **Órdenes** que estén todas; si falta "
+                        "alguna, agrégala separándola con comas."
+                    )
                 if moneda and moneda != "USD":
                     st.warning(
                         f"La factura está en {moneda}; el campo 'Flete marítimo' es USD. "
@@ -270,7 +278,8 @@ def render_calcular():
 
     with c1:
         st.markdown("**Datos del pedimento**")
-        orden = st.text_input("Orden", key="orden")
+        orden = st.text_input("Órdenes", key="orden",
+                              help="Una o varias órdenes (CM###-##). Si son varias, sepáralas con comas.")
         no_pedimento = st.text_input("No. pedimento", key="no_pedimento")
         proveedor = st.text_input("Proveedor", key="proveedor")
         tipo_cambio = st.number_input("Tipo de cambio (MXN/USD)", step=0.001, format="%.4f", key="tipo_cambio")
@@ -309,6 +318,9 @@ def render_calcular():
         factura_proveedor_usd = st.number_input("Factura del proveedor", step=100.0, key="factura_proveedor_usd")
         flete_maritimo_usd = st.number_input("Flete marítimo", step=10.0, key="flete_maritimo_usd")
         cargos_transferencia_usd = st.number_input("Cargos por transferencia", value=0.0, step=10.0)
+        st.markdown("**Referencia**")
+        landed_cost = st.text_input("Landed cost", key="landed_cost",
+                                    help="Folio de landed cost (ej. LC/2026/3293). Lo capturas tú.")
 
     inp = CosteoInputs(
         tipo_cambio=tipo_cambio, impuestos=impuestos, iva_aduana=iva_aduana,
@@ -317,6 +329,7 @@ def render_calcular():
         flete_maritimo_usd=flete_maritimo_usd, factura_proveedor_usd=factura_proveedor_usd,
         cargos_transferencia_usd=cargos_transferencia_usd,
         no_pedimento=no_pedimento, orden=orden, proveedor=proveedor,
+        landed_cost=landed_cost,
     )
     r = calcular(inp)
 
@@ -345,7 +358,7 @@ def render_calcular():
     m3.metric("% gasto vs factura", f"{r.pct_gasto_vs_factura:.2%}",
               help="Cuánto le suman los gastos de importación a la mercancía, en porcentaje.")
 
-    nombre_base = inp.orden or (inp.no_pedimento or "sin_referencia").replace(" ", "_")
+    nombre_base = (inp.orden or inp.no_pedimento or "sin_referencia").replace(",", "_").replace(" ", "")
     st.download_button(
         label="📥 Descargar costeo en Excel",
         data=descarga.generar_xlsx(

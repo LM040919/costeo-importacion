@@ -16,6 +16,17 @@ CATEGORIAS = {
 }
 
 
+def _flash(msg):
+    """Guarda un mensaje para mostrarlo tras el st.rerun()."""
+    st.session_state["_admin_flash"] = msg
+
+
+def _mostrar_flash():
+    msg = st.session_state.pop("_admin_flash", None)
+    if msg:
+        st.success(msg)
+
+
 # ==================================================================
 # Mi cuenta (cualquier usuario logueado): cambiar contraseña
 # ==================================================================
@@ -61,6 +72,7 @@ def render_tarifas_page():
     if not db.enabled():
         _sin_db()
         return
+    _mostrar_flash()
     _admin_tarifas()
 
 
@@ -71,6 +83,7 @@ def render_usuarios_page():
     if not db.enabled():
         _sin_db()
         return
+    _mostrar_flash()
     _admin_usuarios()
 
 
@@ -93,7 +106,7 @@ def _admin_tarifas():
         monto = c4.number_input("Tarifa (MXN, sin IVA)", min_value=0.0, step=100.0)
         if st.form_submit_button("Agregar") and prov.strip():
             db.insert_tarifa(cat, prov.strip(), tipo.strip() or None, monto)
-            st.success(f"Tarifa agregada: {prov} (${monto:,.2f}).")
+            _flash(f"Tarifa agregada: {prov} (${monto:,.2f}).")
             st.rerun()
 
     if tarifas:
@@ -119,11 +132,13 @@ def _admin_tarifas():
             if guardar:
                 db.update_tarifa(sel, proveedor=prov.strip(), tipo=tipo.strip() or None,
                                  tarifa=monto, activo=activo)
-                st.success("Tarifa actualizada.")
+                _flash("Tarifa actualizada.")
+                st.session_state.pop("edit_tarifa_sel", None)  # cierra el formulario
                 st.rerun()
             if eliminar:
                 db.delete_tarifa(sel)
-                st.success("Tarifa eliminada.")
+                _flash("Tarifa eliminada.")
+                st.session_state.pop("edit_tarifa_sel", None)
                 st.rerun()
 
 
@@ -150,7 +165,7 @@ def _admin_usuarios():
                 st.error("Completa correo, nombre y una contraseña de al menos 6 caracteres.")
             else:
                 db.upsert_usuario(username, name.strip(), role, auth.make_password(pw))
-                st.success(f"Usuario {username.strip().lower()} agregado.")
+                _flash(f"Usuario {username.strip().lower()} agregado.")
                 st.rerun()
 
     if usuarios:
@@ -176,12 +191,14 @@ def _admin_usuarios():
             if guardar:
                 pw_hash = auth.make_password(nueva_pw) if nueva_pw else None
                 db.upsert_usuario(sel, name.strip(), role, pw_hash, activo)
-                st.success("Usuario actualizado.")
+                _flash("Usuario actualizado.")
+                st.session_state.pop("edit_user_sel", None)  # cierra el formulario
                 st.rerun()
             if eliminar:
                 if sel == yo:
                     st.error("No puedes eliminar tu propia cuenta mientras la usas.")
                 else:
                     db.delete_usuario(sel)
-                    st.success("Usuario eliminado.")
+                    _flash("Usuario eliminado.")
+                    st.session_state.pop("edit_user_sel", None)
                     st.rerun()
