@@ -81,6 +81,7 @@ _COOKIE_MAXAGE = auth.COOKIE_DIAS * 86400
 
 
 def _leer_cookie():
+    tok = None
     try:
         tok = st.context.cookies.get(auth.COOKIE_NAME)
     except Exception:  # noqa: BLE001
@@ -90,6 +91,11 @@ def _leer_cookie():
             tok = cookie_ctrl.get(auth.COOKIE_NAME)
         except Exception:  # noqa: BLE001
             tok = None
+    # La cookie puede venir URL-encoded (%40=@, %7C=|) según la vía de lectura;
+    # decodificar es idempotente si ya venía en claro.
+    if tok:
+        import urllib.parse
+        tok = urllib.parse.unquote(tok)
     return tok
 
 
