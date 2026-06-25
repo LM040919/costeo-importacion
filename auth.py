@@ -80,12 +80,20 @@ def current_user():
 # Token de sesión (firmado) para la cookie persistente
 # ------------------------------------------------------------------
 def _signing_key() -> bytes:
-    """Clave para firmar el token de sesión, derivada de un secreto estable."""
-    try:
-        base = st.secrets["supabase"]["key"]
-    except Exception:  # noqa: BLE001
+    """Clave para firmar el token de sesión, derivada de un secreto estable
+    del servidor (el DSN de Postgres). Así el token no se puede falsificar con
+    una constante pública, y se mantiene consistente entre recargas."""
+    base = None
+    for ruta in (("postgres", "dsn"), ("auth", "cookie_secret")):
+        try:
+            base = st.secrets[ruta[0]][ruta[1]]
+            if base:
+                break
+        except Exception:  # noqa: BLE001
+            base = None
+    if not base:
         base = "costeo-dev-signing-key"
-    return hashlib.sha256(b"sig:" + base.encode()).digest()
+    return hashlib.sha256(b"sig:" + str(base).encode()).digest()
 
 
 def make_token(username: str) -> str:

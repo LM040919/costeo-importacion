@@ -139,7 +139,8 @@ _tok = st.session_state.get("_session_token") or _leer_cookie()
 if _tok:
     st.session_state["_session_token"] = _tok
     try:
-        cookie_ctrl.set(auth.COOKIE_NAME, _tok, max_age=_COOKIE_MAXAGE, same_site="lax")
+        cookie_ctrl.set(auth.COOKIE_NAME, _tok, max_age=_COOKIE_MAXAGE,
+                        path="/", same_site="lax", secure=True)
     except Exception:  # noqa: BLE001
         pass
 
