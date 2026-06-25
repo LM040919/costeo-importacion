@@ -31,7 +31,7 @@ def _dsn():
     try:
         import psycopg2
 
-        conn = psycopg2.connect(dsn, connect_timeout=5)
+        conn = psycopg2.connect(dsn, connect_timeout=5, client_encoding="utf-8")
         conn.close()
         return dsn
     except Exception as e:  # noqa: BLE001
@@ -43,6 +43,28 @@ def enabled() -> bool:
     return _dsn() is not None
 
 
+def ensure_schema():
+    """Crea las tablas y siembra el catálogo si no existen (idempotente).
+    Lee el schema.sql que viaja junto a este módulo. Permite que la app se
+    auto-configure al arrancar, sin cargar SQL a mano en la base."""
+    dsn = _dsn()
+    if dsn is None:
+        return
+    import os
+    import psycopg2
+
+    ruta = os.path.join(os.path.dirname(__file__), "schema.sql")
+    with open(ruta, encoding="utf-8") as f:
+        ddl = f.read()
+    conn = psycopg2.connect(dsn, connect_timeout=5, client_encoding="utf-8")
+    try:
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute(ddl)
+    finally:
+        conn.close()
+
+
 def _run(sql, params=None, fetch=True):
     """Ejecuta SQL (autocommit). Devuelve lista de dicts si fetch, si no []."""
     dsn = _dsn()
@@ -51,7 +73,7 @@ def _run(sql, params=None, fetch=True):
     import psycopg2
     import psycopg2.extras
 
-    conn = psycopg2.connect(dsn, connect_timeout=5)
+    conn = psycopg2.connect(dsn, connect_timeout=5, client_encoding="utf-8")
     try:
         conn.autocommit = True
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:

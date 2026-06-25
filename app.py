@@ -11,6 +11,7 @@ from streamlit_cookies_controller import CookieController
 import admin
 import auth
 import bq
+import db
 import descarga
 import flete
 import pedimento
@@ -33,6 +34,31 @@ for _campo, _val in _INICIAL.items():
 
 def mxn(x: float) -> str:
     return f"${x:,.2f}"
+
+
+@st.cache_resource(show_spinner=False)
+def _bootstrap_db():
+    """Al arrancar: crea las tablas/siembra catálogo, y siembra los usuarios
+    iniciales (desde los secrets [auth.users]) si la tabla está vacía. Corre
+    una sola vez por contenedor. Si no hay base de datos, no hace nada."""
+    if not db.enabled():
+        return False
+    try:
+        db.ensure_schema()
+        if not db.list_usuarios(incluir_inactivos=True):
+            try:
+                seed = list(st.secrets["auth"]["users"])
+            except Exception:  # noqa: BLE001 — sin [auth.users] en secrets
+                seed = []
+            for u in seed:
+                db.upsert_usuario(u["username"], u.get("name", u["username"]),
+                                  u.get("role", "usuario"), u.get("password"))
+    except Exception as e:  # noqa: BLE001
+        st.warning(f"No se pudo inicializar la base de datos: {e}")
+    return True
+
+
+_bootstrap_db()
 
 
 # ----------------------------------------------------------------------------
