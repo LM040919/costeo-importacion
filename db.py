@@ -1,146 +1,155 @@
-"""Acceso a la base de datos (Supabase / PostgREST).
+"""Acceso a la base de datos (PostgreSQL).
 
-Toda la configuración viene de los secrets de Streamlit:
+Conexión por secrets de Streamlit:
 
-    [supabase]
-    url = "https://<proyecto>.supabase.co"
-    key = "<service_role key>"   # server-side; nunca se expone al navegador
+    [postgres]
+    dsn = "postgresql://usuario:password@host:5432/basededatos"
 
-Si no hay sección [supabase] en los secrets, `enabled()` devuelve False y la
-app sigue funcionando con los datos de respaldo (usuarios en secrets, catálogo
-hardcodeado). Así la transición a base de datos no rompe nada en vivo.
+En Coolify, usa la cadena de conexión INTERNA del recurso PostgreSQL (la que
+apunta al hostname del servicio dentro de la red de Docker), para que la app
+hable con la base sin salir a internet.
 
-Las tablas (costeo_usuarios, costeo_tarifas) tienen RLS activado sin policies,
-por lo que solo la service_role key puede leer/escribir.
+Si no hay [postgres] en los secrets (o no conecta), enabled() devuelve False y
+la app sigue funcionando con los datos de respaldo (usuarios en secrets,
+catálogo hardcodeado). Así la transición no rompe nada.
+
+Tablas: costeo_usuarios, costeo_tarifas (ver schema.sql).
 """
 
 import streamlit as st
 
 
 @st.cache_resource(show_spinner=False)
-def _client():
-    """Crea el cliente de Supabase desde secrets, o None si no está configurado."""
+def _dsn():
+    """Devuelve el DSN si está configurado Y la conexión funciona; si no, None."""
     try:
-        cfg = st.secrets["supabase"]
-        url, key = cfg["url"], cfg["key"]
-    except Exception:  # noqa: BLE001 — sin secrets [supabase]
+        dsn = st.secrets["postgres"]["dsn"]
+    except Exception:  # noqa: BLE001 — sin secrets [postgres]
         return None
-    if not url or not key:
+    if not dsn:
         return None
     try:
-        from supabase import create_client
+        import psycopg2
 
-        return create_client(url, key)
+        conn = psycopg2.connect(dsn, connect_timeout=5)
+        conn.close()
+        return dsn
     except Exception as e:  # noqa: BLE001
         st.warning(f"No se pudo conectar a la base de datos: {e}")
         return None
 
 
 def enabled() -> bool:
-    return _client() is not None
+    return _dsn() is not None
+
+
+def _run(sql, params=None, fetch=True):
+    """Ejecuta SQL (autocommit). Devuelve lista de dicts si fetch, si no []."""
+    dsn = _dsn()
+    if dsn is None:
+        return []
+    import psycopg2
+    import psycopg2.extras
+
+    conn = psycopg2.connect(dsn, connect_timeout=5)
+    try:
+        conn.autocommit = True
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, params or ())
+            if fetch and cur.description:
+                return [dict(r) for r in cur.fetchall()]
+            return []
+    finally:
+        conn.close()
 
 
 # ------------------------------------------------------------------
 # Usuarios
 # ------------------------------------------------------------------
 def list_usuarios(incluir_inactivos: bool = False):
-    cli = _client()
-    if cli is None:
-        return []
-    q = cli.table("costeo_usuarios").select("*").order("role").order("name")
+    sql = "SELECT * FROM costeo_usuarios"
     if not incluir_inactivos:
-        q = q.eq("activo", True)
-    return q.execute().data or []
+        sql += " WHERE activo = TRUE"
+    sql += " ORDER BY role, name"
+    return _run(sql)
 
 
 def get_usuario(username: str):
-    cli = _client()
-    if cli is None:
-        return None
-    rows = (
-        cli.table("costeo_usuarios")
-        .select("*")
-        .eq("username", (username or "").strip().lower())
-        .limit(1)
-        .execute()
-        .data
+    rows = _run(
+        "SELECT * FROM costeo_usuarios WHERE username = %s LIMIT 1",
+        ((username or "").strip().lower(),),
     )
     return rows[0] if rows else None
 
 
 def upsert_usuario(username: str, name: str, role: str, password: str = None, activo: bool = True):
     """Crea o actualiza un usuario. Si password es None, no toca la contraseña."""
-    cli = _client()
-    if cli is None:
-        return
-    fila = {
-        "username": (username or "").strip().lower(),
-        "name": name,
-        "role": role,
-        "activo": activo,
-    }
+    u = (username or "").strip().lower()
     if password is not None:
-        fila["password"] = password
-    cli.table("costeo_usuarios").upsert(fila).execute()
+        _run(
+            """
+            INSERT INTO costeo_usuarios (username, name, role, password, activo)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (username) DO UPDATE
+              SET name = EXCLUDED.name, role = EXCLUDED.role,
+                  password = EXCLUDED.password, activo = EXCLUDED.activo
+            """,
+            (u, name, role, password, activo), fetch=False,
+        )
+    else:
+        # No cambiar la contraseña; el usuario debe existir (es una edición).
+        _run(
+            "UPDATE costeo_usuarios SET name = %s, role = %s, activo = %s WHERE username = %s",
+            (name, role, activo, u), fetch=False,
+        )
 
 
 def set_password(username: str, password: str):
-    cli = _client()
-    if cli is None:
-        return
-    cli.table("costeo_usuarios").update({"password": password}).eq(
-        "username", (username or "").strip().lower()
-    ).execute()
+    _run(
+        "UPDATE costeo_usuarios SET password = %s WHERE username = %s",
+        (password, (username or "").strip().lower()), fetch=False,
+    )
 
 
 def delete_usuario(username: str):
-    cli = _client()
-    if cli is None:
-        return
-    cli.table("costeo_usuarios").delete().eq(
-        "username", (username or "").strip().lower()
-    ).execute()
+    _run("DELETE FROM costeo_usuarios WHERE username = %s",
+         ((username or "").strip().lower(),), fetch=False)
 
 
 # ------------------------------------------------------------------
 # Tarifas
 # ------------------------------------------------------------------
 def list_tarifas(categoria: str = None, incluir_inactivas: bool = False):
-    cli = _client()
-    if cli is None:
-        return []
-    q = cli.table("costeo_tarifas").select("*").order("proveedor").order("tipo")
+    sql = "SELECT * FROM costeo_tarifas"
+    cond, params = [], []
     if categoria:
-        q = q.eq("categoria", categoria)
+        cond.append("categoria = %s")
+        params.append(categoria)
     if not incluir_inactivas:
-        q = q.eq("activo", True)
-    return q.execute().data or []
+        cond.append("activo = TRUE")
+    if cond:
+        sql += " WHERE " + " AND ".join(cond)
+    sql += " ORDER BY proveedor, tipo"
+    return _run(sql, tuple(params))
 
 
 def insert_tarifa(categoria: str, proveedor: str, tipo, tarifa: float, activo: bool = True):
-    cli = _client()
-    if cli is None:
-        return
-    cli.table("costeo_tarifas").insert(
-        {
-            "categoria": categoria,
-            "proveedor": proveedor,
-            "tipo": (tipo or None),
-            "tarifa": tarifa,
-            "activo": activo,
-        }
-    ).execute()
+    _run(
+        """INSERT INTO costeo_tarifas (categoria, proveedor, tipo, tarifa, activo)
+           VALUES (%s, %s, %s, %s, %s)""",
+        (categoria, proveedor, (tipo or None), tarifa, activo), fetch=False,
+    )
 
 
 def update_tarifa(id_: int, **campos):
-    cli = _client()
-    if cli is None:
+    permitidas = {"categoria", "proveedor", "tipo", "tarifa", "activo"}
+    cols = [c for c in campos if c in permitidas]
+    if not cols:
         return
-    cli.table("costeo_tarifas").update(campos).eq("id", id_).execute()
+    set_sql = ", ".join(f"{c} = %s" for c in cols)
+    _run(f"UPDATE costeo_tarifas SET {set_sql} WHERE id = %s",
+         tuple(campos[c] for c in cols) + (id_,), fetch=False)
 
 
 def delete_tarifa(id_: int):
-    cli = _client()
-    if cli is None:
-        return
-    cli.table("costeo_tarifas").delete().eq("id", id_).execute()
+    _run("DELETE FROM costeo_tarifas WHERE id = %s", (id_,), fetch=False)

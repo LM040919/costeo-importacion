@@ -2,6 +2,6 @@ streamlit==1.57.0
 pdfplumber==0.11.9
 pandas==3.0.3
 openpyxl==3.1.5
-supabase==2.31.0
+psycopg2-binary==2.9.10
 streamlit-cookies-controller==0.0.4
 google-cloud-bigquery==3.41.0
