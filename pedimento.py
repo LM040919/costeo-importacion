@@ -96,7 +96,8 @@ def extraer(archivo):
     prv = importe(r"(?<![A-Z/])PRV")
     iva = importe(r"(?<![A-Z/])IVA(?![/A-Z])")
     iva_prv = importe(r"IVA/PRV")
-    igi = importe(r"(?<![A-Z/])IGI(?![/A-Z])")
+    # IGI o IGI/IGE (Impuesto General de Importación / de Exportación); mismo trato.
+    igi = importe(r"(?<![A-Z/])IGI(?:/IGE)?")
     ieps = importe(r"(?<![A-Z/])IEPS(?![/A-Z])")
     ieps_iva = importe(r"IEPS/IVA")
 
