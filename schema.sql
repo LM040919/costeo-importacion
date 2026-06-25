@@ -33,19 +33,10 @@ create table if not exists costeo_tarifas (
     created_at  timestamptz not null default now()
 );
 
--- Evita duplicados al sembrar (categoria + proveedor + tipo).
+-- Evita duplicados (categoria + proveedor + tipo).
 create unique index if not exists costeo_tarifas_uq
     on costeo_tarifas (categoria, proveedor, coalesce(tipo, ''));
 
--- ============================================================
--- Seed del catálogo de tarifas (montos sin IVA; ya son públicos en el repo).
--- Los USUARIOS se siembran aparte (sus hashes no van al repo público).
--- ============================================================
-insert into costeo_tarifas (categoria, proveedor, tipo, tarifa) values
-    ('flete_terrestre',      'Henco',    'Sencillo', 26500),
-    ('flete_terrestre',      'Henco',    'Full',     21000),
-    ('flete_terrestre',      'RTC',      'Full',     37000),
-    ('flete_terrestre',      'GISAP',    'Sencillo', 24800),
-    ('maniobras_honorarios', 'WISE',     null,       13790),
-    ('maniobras_honorarios', 'WOODWARD', null,       18192.50)   -- WOODWARD: pendiente de actualizar
-on conflict (categoria, proveedor, coalesce(tipo, '')) do nothing;
+-- Nota: este archivo solo crea las TABLAS. El catálogo inicial de tarifas y los
+-- usuarios los siembra la app al arrancar (app._bootstrap_db), SOLO si la tabla
+-- está vacía, para respetar ediciones/borrados que hagan las gerentes.

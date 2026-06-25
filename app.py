@@ -45,6 +45,15 @@ def _bootstrap_db():
         return False
     try:
         db.ensure_schema()
+        # Tarifas: sembrar el catálogo inicial SOLO si está vacío (respeta
+        # ediciones/borrados de las gerentes; no se duplica en cada deploy).
+        if not db.list_tarifas(incluir_inactivas=True):
+            import tarifas as _t
+            for t in _t.FLETE_TERRESTRE:
+                db.insert_tarifa("flete_terrestre", t["proveedor"], t.get("tipo"), t["tarifa"])
+            for t in _t.MANIOBRAS_HONORARIOS:
+                db.insert_tarifa("maniobras_honorarios", t["proveedor"], None, t["tarifa"])
+        # Usuarios: sembrar desde los secrets SOLO si la tabla está vacía.
         if not db.list_usuarios(incluir_inactivos=True):
             try:
                 seed = list(st.secrets["auth"]["users"])
