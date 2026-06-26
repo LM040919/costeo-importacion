@@ -116,8 +116,9 @@ def _admin_tarifas():
                      f"{' · ' + t['tipo'] if t.get('tipo') else ''} (${float(t['tarifa']):,.2f})"
             for t in tarifas
         }
+        nonce = st.session_state.get("_tarifa_nonce", 0)
         sel = st.selectbox("Tarifa", list(etiqueta), format_func=lambda i: etiqueta[i],
-                           index=None, placeholder="Selecciona…", key="edit_tarifa_sel")
+                           index=None, placeholder="Selecciona…", key=f"edit_tarifa_sel_{nonce}")
         if sel is not None:
             actual = next(t for t in tarifas if t["id"] == sel)
             with st.form("edit_tarifa"):
@@ -133,12 +134,12 @@ def _admin_tarifas():
                 db.update_tarifa(sel, proveedor=prov.strip(), tipo=tipo.strip() or None,
                                  tarifa=monto, activo=activo)
                 _flash("Tarifa actualizada.")
-                st.session_state.pop("edit_tarifa_sel", None)  # cierra el formulario
+                st.session_state["_tarifa_nonce"] = nonce + 1  # recrea el selectbox vacío (cierra el form)
                 st.rerun()
             if eliminar:
                 db.delete_tarifa(sel)
                 _flash("Tarifa eliminada.")
-                st.session_state.pop("edit_tarifa_sel", None)
+                st.session_state["_tarifa_nonce"] = nonce + 1
                 st.rerun()
 
 
@@ -171,8 +172,9 @@ def _admin_usuarios():
     if usuarios:
         st.markdown("**Editar o eliminar**")
         etiqueta = {u["username"]: f"{u['name']} ({u['username']})" for u in usuarios}
+        nonce = st.session_state.get("_user_nonce", 0)
         sel = st.selectbox("Usuario", list(etiqueta), format_func=lambda k: etiqueta[k],
-                           index=None, placeholder="Selecciona…", key="edit_user_sel")
+                           index=None, placeholder="Selecciona…", key=f"edit_user_sel_{nonce}")
         if sel is not None:
             actual = next(u for u in usuarios if u["username"] == sel)
             yo = auth.current_user()["username"]
@@ -192,7 +194,7 @@ def _admin_usuarios():
                 pw_hash = auth.make_password(nueva_pw) if nueva_pw else None
                 db.upsert_usuario(sel, name.strip(), role, pw_hash, activo)
                 _flash("Usuario actualizado.")
-                st.session_state.pop("edit_user_sel", None)  # cierra el formulario
+                st.session_state["_user_nonce"] = nonce + 1  # recrea el selectbox vacío
                 st.rerun()
             if eliminar:
                 if sel == yo:
@@ -200,5 +202,5 @@ def _admin_usuarios():
                 else:
                     db.delete_usuario(sel)
                     _flash("Usuario eliminado.")
-                    st.session_state.pop("edit_user_sel", None)
+                    st.session_state["_user_nonce"] = nonce + 1
                     st.rerun()

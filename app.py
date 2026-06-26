@@ -107,6 +107,11 @@ def cerrar_sesion():
     st.session_state["_no_restore"] = True
     st.session_state["_logging_out"] = True
     st.session_state.pop("_session_token", None)
+    st.session_state.pop("nav", None)
+    try:
+        st.query_params.clear()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # Borrado diferido de la cookie tras cerrar sesión (en un run sin rerun inmediato).
@@ -167,8 +172,12 @@ def opciones_nav():
 
 
 def ir(destino):
-    """Callback de las tarjetas de Inicio: mueve el menú a otra sección."""
+    """Cambia de sección y lo refleja en la URL (para que recargar no mande a Inicio)."""
     st.session_state["nav"] = destino
+    try:
+        st.query_params["v"] = destino
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def render_sidebar():
@@ -451,6 +460,10 @@ def render_calcular():
 # ----------------------------------------------------------------------------
 # Router: el sidebar se muestra en todas las vistas MENOS en Inicio.
 # ----------------------------------------------------------------------------
+# Al recargar, restaurar la vista desde la URL (?v=...) en vez de mandar a Inicio.
+if "nav" not in st.session_state:
+    _v = st.query_params.get("v")
+    st.session_state["nav"] = _v if _v in opciones_nav() else INICIO
 if st.session_state.get("nav") not in opciones_nav():
     st.session_state["nav"] = INICIO
 vista = st.session_state["nav"]
